@@ -2,6 +2,7 @@
   const defaults = window.CHUBUT_DEFAULT_CONTENT;
   let cms = structuredClone(defaults);
   let lang = localStorage.getItem('chubut-lang') || defaults.site.defaultLanguage || 'en';
+  let cmsPreviewMode = false;
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -246,10 +247,26 @@
     applyTheme(); applySeo(); renderHeader(); renderSections(); renderFooter(); setupVideoGallery(); setupForm(); setupReveal(); setupHeaderScroll();
   }
 
+  addEventListener('message', event => {
+    const msg = event.data;
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'chubut:cms-preview' && msg.payload) {
+      cmsPreviewMode = true;
+      cms = mergeDeep(structuredClone(defaults), msg.payload);
+      if (msg.lang === 'en' || msg.lang === 'es') lang = msg.lang;
+      const y = window.scrollY;
+      renderAll();
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+    if (msg.type === 'chubut:cms-preview-focus' && msg.anchor) {
+      requestAnimationFrame(() => document.getElementById(msg.anchor)?.scrollIntoView({behavior:'smooth',block:'start'}));
+    }
+  });
+
   async function boot() {
     try {
       const remote = await window.ChubutDB.loadHomeContent();
-      if (remote) cms = mergeDeep(structuredClone(defaults), window.CHUBUT_MIGRATE_CONTENT ? window.CHUBUT_MIGRATE_CONTENT(remote) : remote);
+      if (!cmsPreviewMode && remote) cms = mergeDeep(structuredClone(defaults), window.CHUBUT_MIGRATE_CONTENT ? window.CHUBUT_MIGRATE_CONTENT(remote) : remote);
     } catch (err) { console.warn('Using bundled content:', err); }
     if (!cms.site?.languages?.includes(lang)) lang = cms.site?.defaultLanguage || 'en';
     renderAll();

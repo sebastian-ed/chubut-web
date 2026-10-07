@@ -1,4 +1,4 @@
 window.CHUBUT_SUPABASE = {
-  url: "https://lvrxwncxemeefgzrbruk.supabase.co",
-  anonKey: "sb_publishable_aavyFlSWOMNT2R0DP-LmHA_5IRlf96J"
+  url: "https://YOUR_PROJECT.supabase.co",
+  anonKey: "YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY"
 };

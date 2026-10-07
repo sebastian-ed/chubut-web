@@ -34,6 +34,7 @@
         <div class="top-actions"><span class="save-state" id="saveState"></span><a class="btn ghost" href="../" target="_blank">Ver sitio ↗</a><button class="btn primary" id="saveAll">Publicar cambios</button><button class="avatar" id="accountButton">A</button></div>
       </header>
 
+      <div class="admin-workspace" id="adminWorkspace">
       <main class="admin-content">
         <section class="admin-view active" data-view-panel="dashboard">
           <div class="page-intro"><div><span class="kicker">CHUBUT CMS</span><h2>Todo el sitio, en un solo lugar.</h2><p>Editá contenido, estructura, medios, navegación y diseño sin tocar código.</p></div><button class="btn primary" data-go="content">Editar página</button></div>
@@ -79,6 +80,22 @@
 
         <section class="admin-view preview-view" data-view-panel="preview"><div class="preview-toolbar"><div><span class="kicker">LIVE SITE</span><strong>Vista previa</strong></div><button class="btn ghost" id="refreshPreview">Recargar</button></div><iframe id="previewFrame" src="../" title="Vista previa del sitio"></iframe></section>
       </main>
+
+      <aside class="live-preview-panel" id="livePreviewPanel" aria-label="Vista previa en vivo">
+        <div class="live-preview-head">
+          <div><span class="kicker">VISTA PREVIA</span><strong>Actualización instantánea</strong></div>
+          <div class="live-preview-actions">
+            <div class="preview-language" aria-label="Idioma de vista previa"><button class="active" data-preview-lang="en">EN</button><button data-preview-lang="es">ES</button></div>
+            <div class="preview-devices" aria-label="Tamaño de vista previa"><button class="active" data-preview-device="desktop" title="Desktop">▰</button><button data-preview-device="tablet" title="Tablet">▯</button><button data-preview-device="mobile" title="Mobile">▯</button></div>
+            <button class="preview-reload" id="reloadLivePreview" title="Recargar vista previa">↻</button>
+          </div>
+        </div>
+        <div class="live-preview-stage" id="livePreviewStage">
+          <iframe id="livePreviewFrame" src="../?cms_live_preview=1" title="Vista previa instantánea del sitio"></iframe>
+        </div>
+        <div class="live-preview-foot"><span><i></i> LIVE</span><small>Los cambios locales se muestran antes de publicar.</small></div>
+      </aside>
+      </div>
     </section>
   </div>
 

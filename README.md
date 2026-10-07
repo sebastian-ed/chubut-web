@@ -41,3 +41,8 @@ The admin behaves like a simplified WordPress/Webflow content system:
 - `SUPABASE_SETUP.md`: setup instructions.
 
 See `SUPABASE_SETUP.md` before using the admin in production.
+
+
+## Vista previa instantánea del CMS
+
+Las vistas de Inicio, Contenido, Diseño, Navegación y Ajustes incluyen una vista previa lateral del sitio. Los cambios locales se envían al preview en tiempo real, incluso antes de publicar en Supabase. El preview permite alternar EN/ES y tamaños Desktop, Tablet y Mobile.

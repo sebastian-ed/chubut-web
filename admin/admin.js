@@ -9,6 +9,10 @@
   let mediaAssets = [];
   let leads = [];
   let revisions = [];
+  let livePreviewLang = 'en';
+  let livePreviewDevice = 'desktop';
+  let livePreviewTimer = null;
+  const previewableViews = new Set(['dashboard','content','design','navigation','settings']);
 
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -51,8 +55,53 @@
   }
 
   function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2300); }
-  function markDirty() { dirty = true; $('#dirtyBadge').classList.remove('hidden'); $('#saveState').textContent = 'Sin publicar'; }
+  function markDirty() { dirty = true; $('#dirtyBadge').classList.remove('hidden'); $('#saveState').textContent = 'Sin publicar'; scheduleLivePreview(); }
   function clearDirty() { dirty = false; $('#dirtyBadge').classList.add('hidden'); $('#saveState').textContent = 'Publicado'; }
+
+  function previewState() {
+    const next = clone(state);
+    if (editingIndex !== null && draftSection && $('#editorDrawer')?.classList.contains('open') && next.sections?.[editingIndex]) next.sections[editingIndex] = clone(draftSection);
+    return next;
+  }
+  function pushLivePreview(focusAnchor = '') {
+    const frame = $('#livePreviewFrame');
+    if (!frame?.contentWindow) return;
+    frame.contentWindow.postMessage({ type:'chubut:cms-preview', payload:previewState(), lang:livePreviewLang }, '*');
+    if (focusAnchor) setTimeout(() => frame.contentWindow?.postMessage({ type:'chubut:cms-preview-focus', anchor:focusAnchor }, '*'), 70);
+  }
+  function scheduleLivePreview() {
+    clearTimeout(livePreviewTimer);
+    livePreviewTimer = setTimeout(() => pushLivePreview(), 90);
+  }
+  function updateLivePreviewVisibility(view) {
+    const visible = previewableViews.has(view);
+    $('#livePreviewPanel')?.classList.toggle('is-hidden', !visible);
+    $('#adminWorkspace')?.classList.toggle('preview-off', !visible);
+    if (visible) { requestAnimationFrame(resizeLivePreview); scheduleLivePreview(); }
+  }
+  function resizeLivePreview() {
+    const stage = $('#livePreviewStage'), frame = $('#livePreviewFrame');
+    if (!stage || !frame || stage.clientWidth < 20 || stage.clientHeight < 20) return;
+    const widths = { desktop:1440, tablet:834, mobile:390 };
+    const targetWidth = widths[livePreviewDevice] || 1440;
+    const gap = 0;
+    const scale = Math.min(1, Math.max(.28, (stage.clientWidth - gap) / targetWidth));
+    const virtualHeight = Math.max(720, stage.clientHeight / scale);
+    frame.style.width = `${targetWidth}px`;
+    frame.style.height = `${virtualHeight}px`;
+    frame.style.transform = `scale(${scale})`;
+    frame.style.left = `${Math.max(0,(stage.clientWidth-targetWidth*scale)/2)}px`;
+  }
+  function setLivePreviewDevice(device) {
+    livePreviewDevice = ['desktop','tablet','mobile'].includes(device) ? device : 'desktop';
+    $$('[data-preview-device]').forEach(b => b.classList.toggle('active', b.dataset.previewDevice === livePreviewDevice));
+    resizeLivePreview();
+  }
+  function setLivePreviewLanguage(next) {
+    livePreviewLang = next === 'es' ? 'es' : 'en';
+    $$('[data-preview-lang]').forEach(b => b.classList.toggle('active', b.dataset.previewLang === livePreviewLang));
+    scheduleLivePreview();
+  }
 
   function switchView(view) {
     $$('.admin-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
@@ -62,6 +111,7 @@
     if (view === 'forms') loadLeads();
     if (view === 'history') loadHistory();
     if (view === 'preview') refreshPreview();
+    updateLivePreviewVisibility(view);
     $('.admin-sidebar').classList.remove('open');
   }
 
@@ -141,8 +191,8 @@
   async function loadHistory(){if(!db.configured){revisions=[];renderHistory();return}try{revisions=await db.listRevisions(50);renderHistory()}catch(e){toast('Error: '+e.message)}}
   function renderHistory(){$('#historyList').innerHTML=revisions.length?revisions.map(r=>`<article class="history-row"><div><strong>${esc(r.note||'Publicación')}</strong><small>${new Date(r.created_at).toLocaleString('es-AR')} · ${esc(r.id.slice(0,8))}</small></div><button class="btn ghost" data-restore="${r.id}">Restaurar</button></article>`).join(''):`<div class="panel"><p style="margin:0;font-size:11px;color:#777">No hay revisiones. Se crean automáticamente al publicar.</p></div>`;$$('[data-restore]').forEach(b=>b.onclick=async()=>{if(!confirm('¿Restaurar esta revisión y publicarla como versión actual?'))return;try{const payload=await db.getRevision(b.dataset.restore);state=mergeDeep(clone(defaults),payload);renderAllAdmin();markDirty();await saveAll('Restauración de revisión');toast('Revisión restaurada')}catch(e){toast('Error: '+e.message)}})}
 
-  function openSectionEditor(i){editingIndex=i;draftSection=clone(state.sections[i]);drawerTab='content';$('#drawerTitle').textContent=draftSection.label||typeMeta[draftSection.type]?.[1]||'Editar sección';$('#drawerKicker').textContent=(typeMeta[draftSection.type]?.[1]||draftSection.type).toUpperCase();renderDrawer();$('#editorDrawer').classList.add('open');$('#drawerBackdrop').classList.add('open');$('#editorDrawer').setAttribute('aria-hidden','false')}
-  function closeDrawer(){editingIndex=null;draftSection=null;$('#editorDrawer').classList.remove('open');$('#drawerBackdrop').classList.remove('open');$('#editorDrawer').setAttribute('aria-hidden','true')}
+  function openSectionEditor(i){editingIndex=i;draftSection=clone(state.sections[i]);drawerTab='content';$('#drawerTitle').textContent=draftSection.label||typeMeta[draftSection.type]?.[1]||'Editar sección';$('#drawerKicker').textContent=(typeMeta[draftSection.type]?.[1]||draftSection.type).toUpperCase();renderDrawer();$('#editorDrawer').classList.add('open');$('#drawerBackdrop').classList.add('open');$('#editorDrawer').setAttribute('aria-hidden','false');pushLivePreview(draftSection.settings?.anchor||draftSection.id)}
+  function closeDrawer(){editingIndex=null;draftSection=null;$('#editorDrawer').classList.remove('open');$('#drawerBackdrop').classList.remove('open');$('#editorDrawer').setAttribute('aria-hidden','true');scheduleLivePreview()}
   function renderDrawer(){
     $$('.drawer-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.drawerTab===drawerTab));
     const body=$('#drawerBody');
@@ -151,6 +201,8 @@
     if(drawerTab==='layout') body.innerHTML=layoutEditorHtml();
     if(drawerTab==='advanced') body.innerHTML=`<div class="drawer-group"><h3>JSON avanzado</h3><p style="font-size:9px;color:#777">Para ajustes no cubiertos por la interfaz. Un JSON inválido no se aplicará.</p><textarea class="advanced-json" id="advancedJson">${esc(JSON.stringify(draftSection,null,2))}</textarea></div>`;
     bindDrawerFields();
+    $('#advancedJson')?.addEventListener('input',e=>{try{draftSection=JSON.parse(e.target.value);scheduleLivePreview()}catch(_err){}});
+    scheduleLivePreview();
   }
   function contentEditorHtml(){
     const en=draftSection.content?.en||{}, es=draftSection.content?.es||{}; const keys=[...new Set([...Object.keys(en),...Object.keys(es)])];
@@ -166,7 +218,7 @@
   function layoutEditorHtml(){const s=draftSection.settings||{};return `<div class="drawer-group"><h3>Configuración de estructura</h3><div class="form-grid">${Object.entries(s).map(([k,v])=>layoutField(k,v)).join('')}</div></div><div class="drawer-group"><h3>Identificador</h3><label class="field"><span>Anchor / ID</span><input data-draft="settings.anchor" value="${esc(s.anchor||draftSection.id)}"><small>Se usa en los enlaces del menú, por ejemplo #destinations.</small></label></div>`}
   function layoutField(k,v){const selects={align:['left','center','right'],imageSide:['left','right'],tone:['dark','contrast'],cardRatio:['portrait','landscape'],formTone:['light','dark']};if(selects[k])return `<label class="field"><span>${labelForKey(k)}</span><select data-draft="settings.${k}">${selects[k].map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></label>`;if(typeof v==='number')return `<label class="field"><span>${labelForKey(k)}</span><input type="number" data-draft="settings.${k}" value="${v}"></label>`;if(typeof v==='boolean')return `<label class="field checkbox-field"><input type="checkbox" data-draft="settings.${k}" ${v?'checked':''}><span>${labelForKey(k)}</span></label>`;return `<label class="field"><span>${labelForKey(k)}</span><input data-draft="settings.${k}" value="${esc(v??'')}"></label>`}
   function bindDrawerFields(){
-    $$('[data-draft]').forEach(el=>el.addEventListener('input',()=>{let value=el.type==='checkbox'?el.checked:el.value;if(el.type==='number')value=Number(value);setPath(draftSection,el.dataset.draft,value)}));
+    $$('[data-draft]').forEach(el=>el.addEventListener('input',()=>{let value=el.type==='checkbox'?el.checked:el.value;if(el.type==='number')value=Number(value);setPath(draftSection,el.dataset.draft,value);scheduleLivePreview()}));
     $$('[data-item-action]').forEach(btn=>btn.onclick=()=>{const i=Number(btn.dataset.itemIndex),a=btn.dataset.itemAction,arr=draftSection.items||[];if(a==='delete')arr.splice(i,1);if(a==='duplicate'){const cp=clone(arr[i]);cp.id=uid('item');arr.splice(i+1,0,cp)}if(a==='up'&&i>0)[arr[i-1],arr[i]]=[arr[i],arr[i-1]];if(a==='down'&&i<arr.length-1)[arr[i+1],arr[i]]=[arr[i],arr[i+1]];renderDrawer()});
     $('#addItem')?.addEventListener('click',()=>{draftSection.items=draftSection.items||[];const base=draftSection.items[0]?clone(draftSection.items[0]):{id:uid('item'),content:{en:{title:'New item'},es:{title:'Nuevo item'}}};base.id=uid('item');if(base.content?.en)base.content.en.title='New item';if(base.content?.es)base.content.es.title='Nuevo item';draftSection.items.push(base);renderDrawer()});
     $$('[data-option-delete]').forEach(btn=>btn.onclick=()=>{draftSection.formOptions.splice(Number(btn.dataset.optionDelete),1);renderDrawer()});
@@ -180,9 +232,10 @@
 
   async function saveAll(note='Publicación desde CMS'){if(!db.configured){toast('Supabase no está configurado');return}try{$('#saveState').textContent='Publicando…';$('#saveAll').disabled=true;await db.saveHomeContent(state,note);clearDirty();toast('Cambios publicados');loadHistory();refreshPreview()}catch(e){toast('Error al publicar: '+e.message);$('#saveState').textContent='Error'}finally{$('#saveAll').disabled=false}}
   function refreshPreview(){const f=$('#previewFrame');if(f)f.src=`../?cms_preview=${Date.now()}`}
+  function reloadLivePreview(){const f=$('#livePreviewFrame');if(!f)return;f.src=`../?cms_live_preview=${Date.now()}`;}
   function renderAllAdmin(){renderDashboard();renderSections();renderDesign();renderNavigation();renderSettings();renderMedia();renderLeads();renderHistory()}
 
-  async function loadContent(){try{const remote=await db.loadHomeContent();state=remote?mergeDeep(clone(defaults),window.CHUBUT_MIGRATE_CONTENT?window.CHUBUT_MIGRATE_CONTENT(remote):remote):clone(defaults);clearDirty();await Promise.all([loadMedia(),loadLeads(),loadHistory()]);renderAllAdmin()}catch(e){toast('Error cargando contenido: '+e.message)}}
+  async function loadContent(){try{const remote=await db.loadHomeContent();state=remote?mergeDeep(clone(defaults),window.CHUBUT_MIGRATE_CONTENT?window.CHUBUT_MIGRATE_CONTENT(remote):remote):clone(defaults);livePreviewLang=state.site?.defaultLanguage==='es'?'es':'en';clearDirty();await Promise.all([loadMedia(),loadLeads(),loadHistory()]);renderAllAdmin();setLivePreviewLanguage(livePreviewLang);updateLivePreviewVisibility('dashboard');scheduleLivePreview()}catch(e){toast('Error cargando contenido: '+e.message)}}
   async function setSession(session){const logged=Boolean(session?.user);$('#authScreen').classList.toggle('hidden',logged);if(logged){$('#userEmail').textContent=session.user.email||'Usuario';$('#accountButton').textContent=(session.user.email||'A').slice(0,1).toUpperCase();await loadContent()}}
   async function boot(){
     $('#connectionDot').className=db.configured?'online':'offline';$('#connectionText').textContent=db.configured?'Supabase conectado':'Supabase sin configurar';
@@ -204,6 +257,11 @@
   $('#mediaSearch').addEventListener('input',renderMedia);
   $('#mediaUpload').addEventListener('change',async e=>{const files=[...e.target.files];if(!files.length)return;for(const file of files){try{toast(`Subiendo ${file.name}…`);await db.uploadMedia(file)}catch(err){toast(`Error en ${file.name}: ${err.message}`)}}e.target.value='';await loadMedia();toast('Carga finalizada')});
   $('#refreshLeads').onclick=loadLeads; $('#refreshHistory').onclick=loadHistory; $('#refreshPreview').onclick=refreshPreview;
+  $('#reloadLivePreview').onclick=reloadLivePreview;
+  $$('[data-preview-lang]').forEach(b=>b.onclick=()=>setLivePreviewLanguage(b.dataset.previewLang));
+  $$('[data-preview-device]').forEach(b=>b.onclick=()=>setLivePreviewDevice(b.dataset.previewDevice));
+  $('#livePreviewFrame').addEventListener('load',()=>{resizeLivePreview();setTimeout(()=>pushLivePreview(),120)});
+  if ('ResizeObserver' in window) new ResizeObserver(()=>resizeLivePreview()).observe($('#livePreviewStage')); else addEventListener('resize',resizeLivePreview);
   $('#accountButton').onclick=()=>$('#accountMenu').classList.toggle('hidden'); $('#logout').onclick=()=>db.client.auth.signOut();
   $('#login').onclick=async()=>{try{$('#authStatus').textContent='Ingresando…';const {error}=await db.client.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#password').value});if(error)throw error;$('#authStatus').textContent=''}catch(e){$('#authStatus').textContent=e.message}};
   addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
