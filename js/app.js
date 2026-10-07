@@ -27,6 +27,35 @@
   function label(nav) {
     return nav?.labels?.[lang] || nav?.labels?.en || '';
   }
+  function youtubeId(value='') {
+    const raw=String(value||'').trim(); if(!raw)return '';
+    if(/^[A-Za-z0-9_-]{6,20}$/.test(raw) && !raw.includes('/'))return raw;
+    try{const u=new URL(raw);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0]||'';if(u.searchParams.get('v'))return u.searchParams.get('v');const m=u.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/);return m?.[1]||''}catch(_e){const m=raw.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{6,20})/);return m?.[1]||raw}
+  }
+  function mediaElement(type, src, className, poster='', options={}) {
+    const source=String(src||''); if(!source)return `<div class="${esc(className)} media-object media-empty"></div>`;
+    if(type==='youtube'){
+      const id=youtubeId(source);const autoplay=options.autoplay!==false;
+      return `<iframe class="${esc(className)} media-object visual-youtube" src="https://www.youtube-nocookie.com/embed/${esc(id)}?${autoplay?'autoplay=1&mute=1&loop=1&playlist='+esc(id)+'&':''}controls=${options.controls?'1':'0'}&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" title="Chubut video" loading="lazy"></iframe>`;
+    }
+    if(type==='video')return `<video class="${esc(className)} media-object visual-video" ${options.autoplay===false?'': 'autoplay muted loop'} playsinline ${options.controls?'controls':''} preload="metadata" ${poster?`poster="${esc(poster)}"`:''} src="${esc(source)}"></video>`;
+    return `<div class="${esc(className)} media-object visual-image" style="background-image:url('${esc(source)}')"></div>`;
+  }
+  function primaryMedia(section,className,options={}) {
+    const m=section?.media||{};const type=m.type||(m.youtubeId?'youtube':(m.video?'video':'image'));
+    const src=type==='youtube'?(m.youtubeId||m.src||''):type==='video'?(m.video||m.src||''):(m.image||m.src||'');
+    return mediaElement(type,src,className,m.image||'',options);
+  }
+  function itemVisual(item,className) {
+    const type=item?.mediaType||'image';const src=item?.mediaSrc||(type==='image'?item?.image:'')||item?.image||'';
+    return mediaElement(type,src,className,item?.image||'',{autoplay:true,controls:false});
+  }
+  function renderAdditionalMedia(section){
+    if(section?.type==='heroVideo')return '';
+    const items=section?.mediaGallery||[];if(!items.length)return '';
+    const mode=section.mediaGalleryMode||'grid';
+    return `<section class="section additional-media-section mode-${esc(mode)}" aria-label="${lang==='es'?'Galería multimedia':'Media gallery'}"><div class="wrap additional-media-grid">${items.map((m,i)=>`<figure class="additional-media-card additional-${esc(m.type||'image')}">${mediaElement(m.type||'image',m.src||'','additional-media-object',m.poster||'',{autoplay:false,controls:true})}<figcaption>${String(i+1).padStart(2,'0')}</figcaption></figure>`).join('')}</div></section>`;
+  }
 
   function fontQuery(font) {
     return encodeURIComponent(font).replace(/%20/g, '+');
@@ -115,7 +144,7 @@
     return `<section class="editorial-section" id="${esc(st.anchor || s.id)}">
       <div class="wrap editorial-heading reveal"><span class="section-index">01</span><div><span class="eyebrow">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2><p>${esc(x.body || '')}</p>${x.cta ? `<a class="under-link" href="${esc(x.ctaHref || '#')}">${esc(x.cta)} <span>↗</span></a>` : ''}</div></div>
       <div class="editorial-image-block reveal ${st.imagePosition === 'left' ? 'media-left' : ''}">
-        <div class="editorial-image" style="background-image:url('${esc(s.media?.image || '')}')"></div>
+        ${primaryMedia(s,'editorial-image')}
         <div class="editorial-note"><small>${lang === 'es' ? 'PATAGONIA, SIN FILTROS' : 'PATAGONIA, UNFILTERED'}</small><h3>${x.sideTitle || ''}</h3><p>${esc(x.sideBody || '')}</p></div>
       </div>
     </section>`;
@@ -124,12 +153,12 @@
   function renderCardGrid(s) {
     const x = c(s), st = s.settings || {};
     return `<section class="section cards-section" id="${esc(st.anchor || s.id)}"><div class="wrap section-head reveal"><div><span class="eyebrow">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2></div><p>${esc(x.body || '')}</p></div>
-      <div class="wrap card-grid reveal" style="--cols:${Number(st.columns) || 4}">${(s.items || []).map((item, i) => { const y = itemContent(item); return `<a class="image-card ratio-${esc(st.cardRatio || 'portrait')}" href="${esc(item.href || '#')}"><div class="image-card-media" style="background-image:url('${esc(item.image || '')}')"></div><div class="image-card-overlay"></div><span class="card-number">${String(i + 1).padStart(2, '0')}</span><div class="image-card-copy"><small>${esc(y.eyebrow || '')}</small><h3>${esc(y.title || '')}</h3><p>${esc(y.body || '')}</p></div><b>↗</b></a>`; }).join('')}</div></section>`;
+      <div class="wrap card-grid reveal" style="--cols:${Number(st.columns) || 4}">${(s.items || []).map((item, i) => { const y = itemContent(item); return `<a class="image-card ratio-${esc(st.cardRatio || 'portrait')}" href="${esc(item.href || '#')}">${itemVisual(item,'image-card-media')}<div class="image-card-overlay"></div><span class="card-number">${String(i + 1).padStart(2, '0')}</span><div class="image-card-copy"><small>${esc(y.eyebrow || '')}</small><h3>${esc(y.title || '')}</h3><p>${esc(y.body || '')}</p></div><b>↗</b></a>`; }).join('')}</div></section>`;
   }
 
   function renderSplitFeature(s) {
     const x = c(s), st = s.settings || {};
-    const media = `<div class="split-media reveal" style="background-image:url('${esc(s.media?.image || '')}')"><span>${esc(x.eyebrow || '')}</span></div>`;
+    const media = `<div class="split-media reveal">${primaryMedia(s,'split-media-object')}<span>${esc(x.eyebrow || '')}</span></div>`;
     const copy = `<div class="split-copy reveal"><span class="eyebrow">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2><p>${esc(x.body || '')}</p><div class="feature-facts"><div><small>${esc(x.fact1Label || '')}</small><strong>${esc(x.fact1Value || '')}</strong></div><div><small>${esc(x.fact2Label || '')}</small><strong>${esc(x.fact2Value || '')}</strong></div></div></div>`;
     return `<section class="split-feature tone-${esc(st.tone || 'dark')}" id="${esc(st.anchor || s.id)}">${st.imageSide === 'right' ? copy + media : media + copy}</section>`;
   }
@@ -153,12 +182,12 @@
   function renderDestinationGrid(s) {
     const x = c(s), st = s.settings || {};
     return `<section class="section destination-section" id="${esc(st.anchor || s.id)}"><div class="wrap section-head reveal"><div><span class="eyebrow">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2></div><p>${esc(x.body || '')}</p></div>
-      <div class="wrap destination-grid reveal" style="--cols:${Number(st.columns) || 4}">${(s.items || []).map((item, i) => { const y = itemContent(item); return `<article class="destination-card size-${esc(item.size || 'normal')}"><div class="destination-media" style="background-image:url('${esc(item.image || '')}')"></div><div class="destination-shade"></div><span class="destination-number">${String(i + 1).padStart(2, '0')}</span><div class="destination-copy"><small>${esc(y.eyebrow || '')}</small><h3>${esc(y.title || '')}</h3><p>${esc(y.body || '')}</p></div></article>`; }).join('')}</div></section>`;
+      <div class="wrap destination-grid reveal" style="--cols:${Number(st.columns) || 4}">${(s.items || []).map((item, i) => { const y = itemContent(item); return `<article class="destination-card size-${esc(item.size || 'normal')}">${itemVisual(item,'destination-media')}<div class="destination-shade"></div><span class="destination-number">${String(i + 1).padStart(2, '0')}</span><div class="destination-copy"><small>${esc(y.eyebrow || '')}</small><h3>${esc(y.title || '')}</h3><p>${esc(y.body || '')}</p></div></article>`; }).join('')}</div></section>`;
   }
 
   function renderFullBleed(s) {
     const x = c(s), st = s.settings || {};
-    return `<section class="full-bleed" id="${esc(st.anchor || s.id)}" style="--story-overlay:${Math.min(90, Math.max(0, Number(st.overlay) || 48)) / 100};background-image:url('${esc(s.media?.image || '')}')"><div class="full-bleed-shade"></div><div class="wrap full-bleed-copy align-${esc(st.align || 'left')} reveal"><span class="eyebrow light">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2><p>${esc(x.body || '')}</p>${x.cta ? `<a class="button button-light" href="${esc(x.ctaHref || '#')}">${esc(x.cta)} <span>↗</span></a>` : ''}</div></section>`;
+    return `<section class="full-bleed" id="${esc(st.anchor || s.id)}" style="--story-overlay:${Math.min(90, Math.max(0, Number(st.overlay) || 48)) / 100}"><div class="full-bleed-media">${primaryMedia(s,'full-bleed-media-object')}</div><div class="full-bleed-shade"></div><div class="wrap full-bleed-copy align-${esc(st.align || 'left')} reveal"><span class="eyebrow light">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2><p>${esc(x.body || '')}</p>${x.cta ? `<a class="button button-light" href="${esc(x.ctaHref || '#')}">${esc(x.cta)} <span>↗</span></a>` : ''}</div></section>`;
   }
 
   function renderPlanner(s) {
@@ -170,7 +199,7 @@
   const renderers = { heroVideo: renderHero, quickLinks: renderQuickLinks, editorialIntro: renderEditorialIntro, cardGrid: renderCardGrid, splitFeature: renderSplitFeature, videoGallery: renderVideoGallery, destinationGrid: renderDestinationGrid, fullBleed: renderFullBleed, planner: renderPlanner };
 
   function renderSections() {
-    $('#main').innerHTML = (cms.sections || []).filter(s => s.enabled !== false).map(s => renderers[s.type] ? renderers[s.type](s) : '').join('');
+    $('#main').innerHTML = (cms.sections || []).filter(s => s.enabled !== false).map(s => renderers[s.type] ? renderers[s.type](s) + renderAdditionalMedia(s) : '').join('');
   }
 
   function renderFooter() {

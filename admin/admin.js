@@ -7,6 +7,8 @@
   let draftSection = null;
   let drawerTab = 'content';
   let mediaAssets = [];
+  let mediaPickerTarget = null;
+  let mediaPickerTab = 'library';
   let leads = [];
   let revisions = [];
   let livePreviewLang = 'en';
@@ -132,7 +134,7 @@
 
   function renderSections() {
     const list = $('#sectionList');
-    list.innerHTML = (state.sections || []).map((s,i) => `<article class="section-row" draggable="true" data-section-index="${i}"><span class="drag-handle" title="Arrastrar">⋮⋮</span><span class="section-type-icon">${typeMeta[s.type]?.[0] || '□'}</span><div class="section-row-main"><strong>${esc(s.label || typeMeta[s.type]?.[1] || s.type)}</strong><small>${esc(typeMeta[s.type]?.[1] || s.type)} · #${esc(s.settings?.anchor || s.id)}</small></div><span class="status-pill ${s.enabled===false?'off':''}">${s.enabled===false?'Oculta':'Visible'}</span><div class="row-actions"><button class="icon-btn" data-action="edit" title="Editar">✎</button><button class="icon-btn" data-action="toggle" title="Mostrar/ocultar">${s.enabled===false?'◉':'◌'}</button><button class="icon-btn" data-action="duplicate" title="Duplicar">⧉</button><button class="icon-btn danger" data-action="delete" title="Eliminar">×</button></div></article>`).join('');
+    list.innerHTML = (state.sections || []).map((s,i) => `<article class="section-row" draggable="true" data-section-index="${i}"><span class="drag-handle" title="Arrastrar">⋮⋮</span><span class="section-type-icon">${typeMeta[s.type]?.[0] || '□'}</span><div class="section-row-main"><strong>${esc(s.label || typeMeta[s.type]?.[1] || s.type)}</strong><small>${esc(typeMeta[s.type]?.[1] || s.type)} · #${esc(s.settings?.anchor || s.id)} · ${sectionMediaCount(s)} medio${sectionMediaCount(s)===1?'':'s'}</small></div><span class="status-pill ${s.enabled===false?'off':''}">${s.enabled===false?'Oculta':'Visible'}</span><div class="row-actions"><button class="icon-btn" data-action="edit" title="Editar">✎</button><button class="icon-btn" data-action="toggle" title="Mostrar/ocultar">${s.enabled===false?'◉':'◌'}</button><button class="icon-btn" data-action="duplicate" title="Duplicar">⧉</button><button class="icon-btn danger" data-action="delete" title="Eliminar">×</button></div></article>`).join('');
 
     $$('.section-row', list).forEach(row => {
       row.addEventListener('dragstart', e => { row.classList.add('dragging'); e.dataTransfer.setData('text/plain', row.dataset.sectionIndex); });
@@ -182,6 +184,90 @@
     try{mediaAssets=await db.listMedia();renderMedia();renderDashboard();updateMediaDatalist()}catch(e){toast('Error cargando medios: '+e.message)}
   }
   function updateMediaDatalist(){let d=$('#mediaUrls');if(!d){d=document.createElement('datalist');d.id='mediaUrls';document.body.appendChild(d)}d.innerHTML=mediaAssets.map(a=>`<option value="${esc(a.url)}">${esc(a.name||'')}</option>`).join('')}
+  function mediaKindFromUrl(url=''){
+    const clean=String(url).split('?')[0].toLowerCase();
+    if(/\.(mp4|webm|mov|m4v|ogg)$/.test(clean))return 'video';
+    return 'image';
+  }
+  function assetKind(asset){return (asset?.mime_type||'').startsWith('video/')?'video':mediaKindFromUrl(asset?.url||'')}
+  function youtubeId(value=''){
+    const raw=String(value||'').trim(); if(!raw)return '';
+    if(/^[A-Za-z0-9_-]{6,20}$/.test(raw) && !raw.includes('/'))return raw;
+    try{const u=new URL(raw);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0]||'';if(u.searchParams.get('v'))return u.searchParams.get('v');const m=u.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/);return m?.[1]||''}catch(_e){const m=raw.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{6,20})/);return m?.[1]||raw}
+  }
+  function sectionMediaCount(section){
+    let n=0;const m=section?.media||{};
+    if(m.youtubeId||m.image||m.video||m.src)n++;
+    (section?.items||[]).forEach(it=>{if(it.mediaSrc||it.src||it.image)n++});
+    n+=(section?.mediaGallery||[]).length;
+    return n;
+  }
+  function mediaPreviewHtml(type,src,poster=''){
+    if(!src)return `<div class="media-slot-empty"><span>＋</span><small>Sin medio</small></div>`;
+    if(type==='youtube'){const id=youtubeId(src);return `<div class="media-slot-youtube" style="background-image:url('https://img.youtube.com/vi/${esc(id)}/hqdefault.jpg')"><span>▶</span><small>YouTube</small></div>`}
+    if(type==='video')return `<video src="${esc(src)}" ${poster?`poster="${esc(poster)}"`:''} muted playsinline preload="metadata"></video>`;
+    return `<img src="${esc(src)}" alt="" loading="lazy">`;
+  }
+  function currentSectionPrimary(){
+    const m=draftSection?.media||{};
+    if(draftSection?.type==='heroVideo')return {type:'youtube',src:m.youtubeId||m.src||''};
+    const type=m.type||(m.youtubeId?'youtube':(m.video?'video':'image'));
+    const src=type==='youtube'?(m.youtubeId||m.src||''):type==='video'?(m.video||m.src||''):(m.image||m.src||'');
+    return {type,src,poster:m.image||''};
+  }
+  function mediaSlotHtml({title,eyebrow='MEDIO',type='image',src='',poster='',edit='',index='',allow='',canClear=true,note=''}){
+    return `<article class="media-slot-card"><div class="media-slot-preview">${mediaPreviewHtml(type,src,poster)}</div><div class="media-slot-meta"><span>${esc(eyebrow)}</span><strong>${esc(title)}</strong><small>${src?esc(type==='youtube'?`YouTube · ${youtubeId(src)}`:src):'No hay un archivo asignado.'}</small>${note?`<p>${esc(note)}</p>`:''}</div><div class="media-slot-actions"><button class="btn ghost" type="button" data-media-edit="${esc(edit)}" ${index!==''?`data-media-index="${index}"`:''} data-media-allow="${esc(allow)}">Reemplazar</button>${canClear?`<button class="icon-btn danger" type="button" data-media-clear="${esc(edit)}" ${index!==''?`data-media-index="${index}"`:''} title="Quitar">×</button>`:''}</div></article>`;
+  }
+  function itemVisual(it){const type=it.mediaType||'image';return {type,src:it.mediaSrc||(type==='image'?it.image:'')||it.image||'',poster:it.image||''}}
+  function renderPickerLibrary(){
+    const grid=$('#pickerLibraryGrid'),empty=$('#pickerEmpty'); if(!grid)return;
+    const q=($('#pickerSearch')?.value||'').trim().toLowerCase(); const allowed=mediaPickerTarget?.allowed||['image','video','youtube'];
+    const list=mediaAssets.filter(a=>allowed.includes(assetKind(a))&&(!q||(a.name||'').toLowerCase().includes(q)));
+    grid.innerHTML=list.map(a=>{const kind=assetKind(a);return `<button class="picker-asset" type="button" data-picker-asset="${mediaAssets.indexOf(a)}"><div class="picker-asset-preview">${mediaPreviewHtml(kind,a.url)}</div><span>${esc(a.name||'Archivo')}</span><small>${kind==='video'?'VIDEO':'IMAGEN'}</small></button>`}).join('');
+    empty?.classList.toggle('hidden',Boolean(list.length));
+    $$('[data-picker-asset]',grid).forEach(b=>b.onclick=()=>{const a=mediaAssets[Number(b.dataset.pickerAsset)];applyMediaSelection({type:assetKind(a),src:a.url,name:a.name})});
+  }
+  function setPickerTab(tab){
+    mediaPickerTab=tab;$$('[data-picker-tab]').forEach(b=>b.classList.toggle('active',b.dataset.pickerTab===tab));$$('[data-picker-panel]').forEach(p=>p.classList.toggle('active',p.dataset.pickerPanel===tab));
+  }
+  function openMediaPicker(target){
+    mediaPickerTarget=target;const allowed=target.allowed||['image','video','youtube'];
+    const preferred=target.preferred||(allowed.includes('image')?'library':allowed.includes('youtube')?'youtube':'library');
+    $('#mediaPickerTitle').textContent=target.title||'Elegir medio';
+    $$('[data-picker-tab]').forEach(b=>{const t=b.dataset.pickerTab;b.classList.toggle('hidden',(t==='youtube'&&!allowed.includes('youtube'))||(t==='url'&&!allowed.some(x=>x==='image'||x==='video'))||(t==='library'&&!allowed.some(x=>x==='image'||x==='video')))});
+    const urlType=$('#pickerUrlType'); if(urlType){urlType.innerHTML=['image','video'].filter(x=>allowed.includes(x)).map(x=>`<option value="${x}">${x==='image'?'Imagen':'Video'}</option>`).join('')}
+    $('#pickerSearch').value='';$('#pickerUrlValue').value='';$('#pickerYoutubeValue').value='';$('#youtubePickerPreview').innerHTML='<span>YOUTUBE</span>';
+    $('#mediaPickerBackdrop').classList.remove('hidden');
+    setPickerTab(preferred==='youtube'?'youtube':preferred==='url'?'url':'library');renderPickerLibrary();
+  }
+  function closeMediaPicker(){mediaPickerTarget=null;$('#mediaPickerBackdrop').classList.add('hidden')}
+  function applyMediaSelection(selection){
+    const t=mediaPickerTarget;if(!t||!draftSection)return;
+    if(t.mode==='hero'){draftSection.media=draftSection.media||{};draftSection.media.youtubeId=youtubeId(selection.src);draftSection.media.src=draftSection.media.youtubeId}
+    if(t.mode==='sectionPrimary'){
+      draftSection.media=draftSection.media||{};draftSection.media.type=selection.type;draftSection.media.src=selection.src;
+      if(selection.type==='image')draftSection.media.image=selection.src;
+      if(selection.type==='video')draftSection.media.video=selection.src;
+      if(selection.type==='youtube')draftSection.media.youtubeId=youtubeId(selection.src);
+    }
+    if(t.mode==='itemVisual'){
+      const it=draftSection.items?.[t.index];if(it){it.mediaType=selection.type;it.mediaSrc=selection.type==='youtube'?youtubeId(selection.src):selection.src;if(selection.type==='image')it.image=selection.src}
+    }
+    if(t.mode==='videoSource'){
+      const it=draftSection.items?.[t.index];if(it){it.type=selection.type==='youtube'?'youtube':'video';it.src=selection.type==='youtube'?youtubeId(selection.src):selection.src}
+    }
+    if(t.mode==='poster'){const it=draftSection.items?.[t.index];if(it)it.image=selection.src}
+    if(t.mode==='galleryItem'){
+      const g=draftSection.mediaGallery?.[t.index];if(g){g.type=selection.type;g.src=selection.type==='youtube'?youtubeId(selection.src):selection.src}
+    }
+    if(t.mode==='appendGallery'){
+      draftSection.mediaGallery=draftSection.mediaGallery||[];draftSection.mediaGallery.push({id:uid('media'),type:selection.type,src:selection.type==='youtube'?youtubeId(selection.src):selection.src})
+    }
+    if(t.mode==='appendVideo'){
+      draftSection.items=draftSection.items||[];draftSection.items.push({id:uid('vid'),type:selection.type==='youtube'?'youtube':'video',src:selection.type==='youtube'?youtubeId(selection.src):selection.src,image:'',content:{en:{eyebrow:'CHUBUT IN MOTION',title:'New video'},es:{eyebrow:'CHUBUT EN MOVIMIENTO',title:'Nuevo video'}}})
+    }
+    closeMediaPicker();renderDrawer();scheduleLivePreview();
+  }
   function renderMedia(){const q=($('#mediaSearch')?.value||'').toLowerCase();const list=mediaAssets.filter(a=>(a.name||'').toLowerCase().includes(q));$('#mediaCount').textContent=`${list.length} archivos`;$('#mediaGrid').innerHTML=list.length?list.map((a,i)=>{const idx=mediaAssets.indexOf(a);const video=(a.mime_type||'').startsWith('video/');return `<article class="media-card"><div class="media-preview" ${video?'':`style="background-image:url('${esc(a.url)}')"`}>${video?`<video src="${esc(a.url)}" muted preload="metadata"></video>`:''}</div><div class="media-info"><strong>${esc(a.name||'Archivo')}</strong><small>${esc(a.mime_type||'')} ${a.size_bytes?`· ${Math.round(a.size_bytes/1024)} KB`:''}</small></div><div class="media-actions"><button data-media-copy="${idx}">Copiar URL</button><button data-media-delete="${idx}">Eliminar</button></div></article>`}).join(''):`<div class="panel"><p style="margin:0;font-size:11px;color:#777">Todavía no hay medios cargados en la biblioteca.</p></div>`;
     $$('[data-media-copy]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(mediaAssets[Number(b.dataset.mediaCopy)].url);toast('URL copiada')});
     $$('[data-media-delete]').forEach(b=>b.onclick=async()=>{const a=mediaAssets[Number(b.dataset.mediaDelete)];if(!confirm(`¿Eliminar ${a.name}?`))return;try{await db.deleteMedia(a);mediaAssets=mediaAssets.filter(x=>x!==a);renderMedia();renderDashboard();toast('Medio eliminado')}catch(e){toast('Error: '+e.message)}});
@@ -207,6 +293,7 @@
     pushLivePreview(draftSection.settings?.anchor||draftSection.id);
   }
   function closeDrawer(){
+    if(!$('#mediaPickerBackdrop')?.classList.contains('hidden')) closeMediaPicker();
     const drawer=$('#editorDrawer');
     $('#adminWorkspace')?.classList.remove('editor-open');
     drawer?.classList.remove('open');
@@ -236,9 +323,41 @@
     return `<div class="drawer-group"><h3>Identificación</h3><div class="form-grid"><label class="field"><span>Nombre interno</span><input data-draft="label" value="${esc(draftSection.label||'')}"></label><label class="field checkbox-field"><input type="checkbox" data-draft="enabled" ${draftSection.enabled!==false?'checked':''}><span>Sección visible</span></label></div></div>${bilingual}${items}${options}`;
   }
   function fieldHtml(label,path,value,key){const long=/title|body|copy|description|side|note|formTitle/i.test(key);const href=/href/i.test(key);return `<label class="field"><span>${esc(label)}</span>${long?`<textarea data-draft="${path}">${esc(value??'')}</textarea>`:`<input ${href?'type="text"':''} data-draft="${path}" value="${esc(value??'')}">`}</label>`}
-  function itemEditorHtml(it,i){const primitive=Object.entries(it).filter(([k,v])=>k!=='content'&&k!=='id'&&['string','number','boolean'].includes(typeof v));const keys=[...new Set([...Object.keys(it.content?.en||{}),...Object.keys(it.content?.es||{})])];return `<div class="drawer-item"><div class="drawer-item-head"><strong>Item ${i+1} · ${esc(it.content?.en?.title||it.id||'')}</strong><div><button class="icon-btn" data-item-action="up" data-item-index="${i}">↑</button><button class="icon-btn" data-item-action="down" data-item-index="${i}">↓</button><button class="icon-btn" data-item-action="duplicate" data-item-index="${i}">⧉</button><button class="icon-btn danger" data-item-action="delete" data-item-index="${i}">×</button></div></div><div class="drawer-item-body">${primitive.length?`<div class="form-grid">${primitive.map(([k,v])=>`<label class="field"><span>${labelForKey(k)}</span><input ${k==='image'?'list="mediaUrls"':''} data-draft="items.${i}.${k}" value="${esc(v)}"></label>`).join('')}</div>`:''}<div class="drawer-language-grid"><div class="lang-box"><strong>English</strong>${keys.map(k=>fieldHtml(labelForKey(k),`items.${i}.content.en.${k}`,it.content?.en?.[k]||'',k)).join('')}</div><div class="lang-box"><strong>Español</strong>${keys.map(k=>fieldHtml(labelForKey(k),`items.${i}.content.es.${k}`,it.content?.es?.[k]||'',k)).join('')}</div></div></div></div>`}
+  function itemEditorHtml(it,i){
+    const mediaKeys=new Set(['image','src','type','mediaType','mediaSrc','poster']);
+    const primitive=Object.entries(it).filter(([k,v])=>k!=='content'&&k!=='id'&&!mediaKeys.has(k)&&['string','number','boolean'].includes(typeof v));
+    const keys=[...new Set([...Object.keys(it.content?.en||{}),...Object.keys(it.content?.es||{})])];
+    return `<div class="drawer-item"><div class="drawer-item-head"><strong>Item ${i+1} · ${esc(it.content?.en?.title||it.id||'')}</strong><div><button class="icon-btn" data-item-action="up" data-item-index="${i}">↑</button><button class="icon-btn" data-item-action="down" data-item-index="${i}">↓</button><button class="icon-btn" data-item-action="duplicate" data-item-index="${i}">⧉</button><button class="icon-btn danger" data-item-action="delete" data-item-index="${i}">×</button></div></div><div class="drawer-item-body">${primitive.length?`<div class="form-grid">${primitive.map(([k,v])=>`<label class="field"><span>${labelForKey(k)}</span><input data-draft="items.${i}.${k}" value="${esc(v)}"></label>`).join('')}</div>`:''}<div class="drawer-language-grid"><div class="lang-box"><strong>English</strong>${keys.map(k=>fieldHtml(labelForKey(k),`items.${i}.content.en.${k}`,it.content?.en?.[k]||'',k)).join('')}</div><div class="lang-box"><strong>Español</strong>${keys.map(k=>fieldHtml(labelForKey(k),`items.${i}.content.es.${k}`,it.content?.es?.[k]||'',k)).join('')}</div></div><div class="item-media-shortcut"><span>Medios de este item</span><button class="btn ghost" type="button" data-jump-media-item="${i}">Ver / reemplazar medio</button></div></div></div>`
+  }
   function labelForKey(k){return ({eyebrow:'Eyebrow / categoría',title:'Título',body:'Texto',cta:'CTA',ctaHref:'Enlace CTA',secondary:'CTA secundario',secondaryHref:'Enlace secundario',meta:'Meta',sideTitle:'Título lateral',sideBody:'Texto lateral',fact1Label:'Dato 1 · etiqueta',fact1Value:'Dato 1 · valor',fact2Label:'Dato 2 · etiqueta',fact2Value:'Dato 2 · valor',image:'Imagen',href:'Enlace',src:'Video / YouTube ID',size:'Tamaño',type:'Tipo',icon:'Ícono',formEyebrow:'Form · eyebrow',formTitle:'Form · título',nameLabel:'Form · nombre',namePlaceholder:'Form · placeholder',interestLabel:'Form · interés',submit:'Form · botón',success:'Mensaje éxito',error:'Mensaje error',note1Title:'Nota 1 · título',note1Body:'Nota 1 · texto',note2Title:'Nota 2 · título',note2Body:'Nota 2 · texto'})[k]||k.replace(/([A-Z])/g,' $1')}
-  function mediaEditorHtml(){const media=draftSection.media||{};const fields=Object.keys(media).map(k=>`<label class="field"><span>${labelForKey(k)}</span><input ${/image/i.test(k)?'list="mediaUrls"':''} data-draft="media.${k}" value="${esc(media[k]||'')}"><small>${/youtube/i.test(k)?'Pegá solamente el ID del video de YouTube.':'Podés pegar una URL o elegir una URL subida a Supabase.'}</small></label>`).join('');return `<div class="drawer-group"><h3>Medios principales</h3><div class="form-stack">${fields||'<p style="font-size:10px;color:#777">Esta sección usa medios dentro de sus items. Editalos en Contenido.</p>'}</div></div><div class="drawer-group"><h3>Biblioteca rápida</h3><p style="font-size:9px;color:#777">Las URLs de la biblioteca aparecen como sugerencias en los campos de imagen. También podés copiar una URL desde la sección Medios.</p><button class="btn ghost" id="goMediaFromDrawer">Abrir biblioteca</button></div>`}
+  function mediaEditorHtml(){
+    const type=draftSection.type;
+    let html=`<div class="drawer-group media-overview"><div class="drawer-group-head"><div><h3>Medios de la sección</h3><p>Acá podés identificar y reemplazar cada imagen o video sin buscar URLs dentro del contenido.</p></div><span class="media-count-pill">${sectionMediaCount(draftSection)} medios</span></div>`;
+    if(type==='heroVideo'){
+      const m=currentSectionPrimary();
+      html+=mediaSlotHtml({title:'Video principal del Hero',eyebrow:'HERO · YOUTUBE',type:'youtube',src:m.src,edit:'hero',allow:'youtube',canClear:false,note:'El hero mantiene un único video de YouTube, tal como está definido para la portada.'});
+    }else if(['editorialIntro','splitFeature','fullBleed'].includes(type)){
+      const m=currentSectionPrimary();
+      html+=mediaSlotHtml({title:'Visual principal',eyebrow:'MEDIO PRINCIPAL',type:m.type,src:m.src,poster:m.poster,edit:'sectionPrimary',allow:'image,video,youtube',note:'Puede ser imagen, video alojado o YouTube.'});
+    }else if(type==='videoGallery'){
+      html+=`<div class="media-editor-heading"><strong>Videos de la galería</strong><button class="btn ghost" type="button" id="addVideoItem">+ Agregar video</button></div>`;
+      (draftSection.items||[]).forEach((it,i)=>{
+        html+=`<div class="media-item-stack">${mediaSlotHtml({title:it.content?.en?.title||`Video ${i+1}`,eyebrow:`VIDEO ${String(i+1).padStart(2,'0')}`,type:it.type==='youtube'?'youtube':'video',src:it.src||'',poster:it.image||'',edit:'videoSource',index:i,allow:'video,youtube',canClear:false})}${mediaSlotHtml({title:'Imagen de portada / thumbnail',eyebrow:'POSTER',type:'image',src:it.image||'',edit:'poster',index:i,allow:'image',note:'Se usa en la miniatura del video.'})}</div>`;
+      });
+    }else if(['cardGrid','destinationGrid'].includes(type)){
+      html+=`<div class="media-editor-heading"><strong>Visuales de las tarjetas</strong><span>Cada tarjeta puede usar imagen, video o YouTube.</span></div>`;
+      (draftSection.items||[]).forEach((it,i)=>{const m=itemVisual(it);html+=`<div class="media-item-stack">${mediaSlotHtml({title:it.content?.en?.title||`Item ${i+1}`,eyebrow:`ITEM ${String(i+1).padStart(2,'0')}`,type:m.type,src:m.src,poster:m.poster,edit:'itemVisual',index:i,allow:'image,video,youtube',note:m.type!=='image'?'La imagen existente se conserva como poster del video.':''})}</div>`});
+    }else{
+      html+=`<div class="media-empty-state"><span>▧</span><div><strong>Esta sección no tiene un visual principal.</strong><p>Podés agregar imágenes o videos a la galería adicional de abajo.</p></div></div>`;
+    }
+    html+=`</div>`;
+    if(type!=='heroVideo'){
+      const gallery=draftSection.mediaGallery||[];
+      html+=`<div class="drawer-group"><div class="drawer-group-head"><div><h3>Galería adicional</h3><p>Sumá tantos medios como necesites. Solo aparece en la web si agregás contenido.</p></div><button class="btn primary" type="button" id="addSectionMedia">+ Agregar medio</button></div><label class="field media-layout-field"><span>Presentación</span><select data-draft="mediaGalleryMode"><option value="grid" ${draftSection.mediaGalleryMode==='grid'||!draftSection.mediaGalleryMode?'selected':''}>Grilla editorial</option><option value="rail" ${draftSection.mediaGalleryMode==='rail'?'selected':''}>Carrusel horizontal</option><option value="feature" ${draftSection.mediaGalleryMode==='feature'?'selected':''}>Destacado</option></select></label><div class="section-media-list">${gallery.map((g,i)=>`<div class="gallery-media-row">${mediaSlotHtml({title:`Medio adicional ${i+1}`,eyebrow:(g.type||'image').toUpperCase(),type:g.type||'image',src:g.src||'',poster:g.poster||'',edit:'galleryItem',index:i,allow:'image,video,youtube'})}<div class="gallery-order-actions"><button class="icon-btn" data-gallery-move="up" data-media-index="${i}" type="button">↑</button><button class="icon-btn" data-gallery-move="down" data-media-index="${i}" type="button">↓</button></div></div>`).join('')||'<div class="media-empty-state compact"><span>＋</span><div><strong>Sin medios adicionales</strong><p>Usá “Agregar medio” para sumar imágenes, videos o YouTube.</p></div></div>'}</div></div>`;
+    }
+    html+=`<div class="drawer-group media-help"><h3>Fuentes disponibles</h3><div class="media-source-options"><span><b>▧</b> Biblioteca Supabase</span><span><b>↑</b> Subir archivo</span><span><b>↗</b> URL externa</span><span><b>▶</b> YouTube</span></div><p>Al tocar “Reemplazar” vas a poder elegir cualquiera de estas fuentes desde un único selector.</p></div>`;
+    return html;
+  }
   function layoutEditorHtml(){const s=draftSection.settings||{};return `<div class="drawer-group"><h3>Configuración de estructura</h3><div class="form-grid">${Object.entries(s).map(([k,v])=>layoutField(k,v)).join('')}</div></div><div class="drawer-group"><h3>Identificador</h3><label class="field"><span>Anchor / ID</span><input data-draft="settings.anchor" value="${esc(s.anchor||draftSection.id)}"><small>Se usa en los enlaces del menú, por ejemplo #destinations.</small></label></div>`}
   function layoutField(k,v){const selects={align:['left','center','right'],imageSide:['left','right'],tone:['dark','contrast'],cardRatio:['portrait','landscape'],formTone:['light','dark']};if(selects[k])return `<label class="field"><span>${labelForKey(k)}</span><select data-draft="settings.${k}">${selects[k].map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></label>`;if(typeof v==='number')return `<label class="field"><span>${labelForKey(k)}</span><input type="number" data-draft="settings.${k}" value="${v}"></label>`;if(typeof v==='boolean')return `<label class="field checkbox-field"><input type="checkbox" data-draft="settings.${k}" ${v?'checked':''}><span>${labelForKey(k)}</span></label>`;return `<label class="field"><span>${labelForKey(k)}</span><input data-draft="settings.${k}" value="${esc(v??'')}"></label>`}
   function bindDrawerFields(){
@@ -247,7 +366,23 @@
     $('#addItem')?.addEventListener('click',()=>{draftSection.items=draftSection.items||[];const base=draftSection.items[0]?clone(draftSection.items[0]):{id:uid('item'),content:{en:{title:'New item'},es:{title:'Nuevo item'}}};base.id=uid('item');if(base.content?.en)base.content.en.title='New item';if(base.content?.es)base.content.es.title='Nuevo item';draftSection.items.push(base);renderDrawer()});
     $$('[data-option-delete]').forEach(btn=>btn.onclick=()=>{draftSection.formOptions.splice(Number(btn.dataset.optionDelete),1);renderDrawer()});
     $('#addOption')?.addEventListener('click',()=>{draftSection.formOptions.push({value:'new',labels:{en:'New option',es:'Nueva opción'}});renderDrawer()});
-    $('#goMediaFromDrawer')?.addEventListener('click',()=>{closeDrawer();switchView('media')});
+    $$('[data-jump-media-item]').forEach(btn=>btn.onclick=()=>{drawerTab='media';renderDrawer();setTimeout(()=>{const slots=$$('.media-slot-card');slots[Number(btn.dataset.jumpMediaItem)]?.scrollIntoView({behavior:'smooth',block:'center'})},30)});
+    $$('[data-media-edit]').forEach(btn=>btn.onclick=()=>{
+      const action=btn.dataset.mediaEdit,index=Number(btn.dataset.mediaIndex||0),allowed=(btn.dataset.mediaAllow||'image,video,youtube').split(',').filter(Boolean);
+      const titles={hero:'Video del Hero',sectionPrimary:'Visual principal',itemVisual:'Visual del item',videoSource:'Fuente del video',poster:'Imagen de portada',galleryItem:'Medio adicional'};
+      openMediaPicker({mode:action,index,allowed,title:titles[action]||'Elegir medio',preferred:allowed.length===1&&allowed[0]==='youtube'?'youtube':'library'});
+    });
+    $$('[data-media-clear]').forEach(btn=>btn.onclick=()=>{
+      const action=btn.dataset.mediaClear,index=Number(btn.dataset.mediaIndex||0);
+      if(action==='sectionPrimary'){draftSection.media={...(draftSection.media||{}),type:'image',src:'',image:'',video:'',youtubeId:''}}
+      if(action==='itemVisual'){const it=draftSection.items?.[index];if(it){it.mediaType='image';it.mediaSrc='';it.image=''}}
+      if(action==='poster'){const it=draftSection.items?.[index];if(it)it.image=''}
+      if(action==='galleryItem'){draftSection.mediaGallery?.splice(index,1)}
+      renderDrawer();scheduleLivePreview();
+    });
+    $('#addSectionMedia')?.addEventListener('click',()=>openMediaPicker({mode:'appendGallery',allowed:['image','video','youtube'],title:'Agregar medio a la sección'}));
+    $('#addVideoItem')?.addEventListener('click',()=>openMediaPicker({mode:'appendVideo',allowed:['video','youtube'],title:'Agregar video',preferred:'library'}));
+    $$('[data-gallery-move]').forEach(btn=>btn.onclick=()=>{const i=Number(btn.dataset.mediaIndex),arr=draftSection.mediaGallery||[];if(btn.dataset.galleryMove==='up'&&i>0)[arr[i-1],arr[i]]=[arr[i],arr[i-1]];if(btn.dataset.galleryMove==='down'&&i<arr.length-1)[arr[i+1],arr[i]]=[arr[i],arr[i+1]];renderDrawer()});
   }
 
   function openAddModal(){const grid=$('#templateGrid');grid.innerHTML=Object.entries(typeMeta).map(([type,m])=>`<button class="template-card" data-template="${type}"><i>${m[0]}</i><strong>${m[1]}</strong><small>${m[2]}</small></button>`).join('');$('#modalBackdrop').classList.remove('hidden');$$('[data-template]').forEach(b=>b.onclick=()=>addSectionType(b.dataset.template))}
@@ -281,6 +416,18 @@
   $('#resetTheme').onclick=()=>{if(confirm('¿Restaurar el diseño visual por defecto?')){state.theme=clone(defaults.theme);markDirty();renderDesign();toast('Diseño restaurado')}};
   $('#addNav').onclick=()=>{state.navigation.push({id:uid('nav'),href:'#section',labels:{en:'New link',es:'Nuevo enlace'},featured:false});markDirty();renderNavigation()};
   $('#mediaSearch').addEventListener('input',renderMedia);
+  $$('[data-picker-tab]').forEach(b=>b.onclick=()=>setPickerTab(b.dataset.pickerTab));
+  $('#mediaPickerClose').onclick=closeMediaPicker;
+  $('#mediaPickerBackdrop').addEventListener('click',e=>{if(e.target===$('#mediaPickerBackdrop'))closeMediaPicker()});
+  $('#pickerSearch').addEventListener('input',renderPickerLibrary);
+  $('#pickerUpload').addEventListener('change',async e=>{
+    const file=e.target.files?.[0];if(!file)return;const kind=(file.type||'').startsWith('video/')?'video':'image';const allowed=mediaPickerTarget?.allowed||[];
+    if(!allowed.includes(kind)){toast(kind==='video'?'Este campo no acepta videos.':'Este campo no acepta imágenes.');e.target.value='';return}
+    try{toast(`Subiendo ${file.name}…`);const saved=await db.uploadMedia(file);mediaAssets.unshift(saved);updateMediaDatalist();renderMedia();renderDashboard();applyMediaSelection({type:kind,src:saved.url,name:saved.name});toast('Archivo subido y seleccionado')}catch(err){toast('Error al subir: '+err.message)}finally{e.target.value=''}
+  });
+  $('#pickerUseUrl').onclick=()=>{const type=$('#pickerUrlType').value,src=$('#pickerUrlValue').value.trim();if(!src){toast('Pegá una URL');return}applyMediaSelection({type,src})};
+  $('#pickerYoutubeValue').addEventListener('input',e=>{const id=youtubeId(e.target.value);$('#youtubePickerPreview').innerHTML=id?`<div style="background-image:url('https://img.youtube.com/vi/${esc(id)}/hqdefault.jpg')"><span>▶</span></div>`:'<span>YOUTUBE</span>'});
+  $('#pickerUseYoutube').onclick=()=>{const id=youtubeId($('#pickerYoutubeValue').value);if(!id){toast('Ingresá una URL o ID de YouTube válido');return}applyMediaSelection({type:'youtube',src:id})};
   $('#mediaUpload').addEventListener('change',async e=>{const files=[...e.target.files];if(!files.length)return;for(const file of files){try{toast(`Subiendo ${file.name}…`);await db.uploadMedia(file)}catch(err){toast(`Error en ${file.name}: ${err.message}`)}}e.target.value='';await loadMedia();toast('Carga finalizada')});
   $('#refreshLeads').onclick=loadLeads; $('#refreshHistory').onclick=loadHistory; $('#refreshPreview').onclick=refreshPreview;
   $('#reloadLivePreview').onclick=reloadLivePreview;

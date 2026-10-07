@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=8.2.0">
+  <link rel="stylesheet" href="admin.css?v=8.3.0">
 </head>
 <body>
   <div class="admin-shell" id="adminShell">
@@ -114,6 +114,39 @@
 
   <div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" id="modal"><header><div><span class="kicker">BLOQUES</span><h2>Agregar sección</h2></div><button id="modalClose">×</button></header><div class="template-grid" id="templateGrid"></div></div></div>
 
+
+  <div class="modal-backdrop hidden media-picker-backdrop" id="mediaPickerBackdrop">
+    <div class="modal media-picker-modal" role="dialog" aria-modal="true" aria-labelledby="mediaPickerTitle">
+      <header><div><span class="kicker">MEDIOS</span><h2 id="mediaPickerTitle">Elegir medio</h2></div><button id="mediaPickerClose" type="button" aria-label="Cerrar">×</button></header>
+      <div class="media-picker-tabs">
+        <button class="active" data-picker-tab="library">Biblioteca</button>
+        <button data-picker-tab="url">URL externa</button>
+        <button data-picker-tab="youtube">YouTube</button>
+      </div>
+      <div class="media-picker-body">
+        <section class="picker-panel active" data-picker-panel="library">
+          <div class="picker-toolbar"><input id="pickerSearch" type="search" placeholder="Buscar en la biblioteca…"><label class="btn primary upload-label">+ Subir archivo<input id="pickerUpload" type="file" accept="image/*,video/*" hidden></label></div>
+          <div class="picker-library-grid" id="pickerLibraryGrid"></div>
+          <p class="picker-empty hidden" id="pickerEmpty">No hay archivos compatibles en la biblioteca.</p>
+        </section>
+        <section class="picker-panel" data-picker-panel="url">
+          <div class="picker-source-form">
+            <label class="field"><span>Tipo de medio</span><select id="pickerUrlType"><option value="image">Imagen</option><option value="video">Video</option></select></label>
+            <label class="field"><span>URL</span><input id="pickerUrlValue" type="url" placeholder="https://…"><small>Podés usar una imagen o video alojado en otro servidor/CDN.</small></label>
+            <button class="btn primary" id="pickerUseUrl" type="button">Usar esta URL</button>
+          </div>
+        </section>
+        <section class="picker-panel" data-picker-panel="youtube">
+          <div class="picker-source-form">
+            <label class="field"><span>Video de YouTube</span><input id="pickerYoutubeValue" type="text" placeholder="URL de YouTube o ID del video"><small>Acepta youtube.com, youtu.be, Shorts, Embed o directamente el ID.</small></label>
+            <div class="youtube-picker-preview" id="youtubePickerPreview"><span>YOUTUBE</span></div>
+            <button class="btn primary" id="pickerUseYoutube" type="button">Usar video</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
   <div class="account-menu hidden" id="accountMenu"><span id="userEmail"></span><button id="logout">Cerrar sesión</button></div>
 
@@ -121,6 +154,6 @@
   <script src="../js/supabase-config.js"></script>
   <script src="../js/content.js"></script>
   <script src="../js/supabase.js"></script>
-  <script src="admin.js?v=8.2.0"></script>
+  <script src="admin.js?v=8.3.0"></script>
 </body>
 </html>

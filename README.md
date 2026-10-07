@@ -46,3 +46,8 @@ See `SUPABASE_SETUP.md` before using the admin in production.
 ## Vista previa instantánea del CMS
 
 Las vistas de Inicio, Contenido, Diseño, Navegación y Ajustes incluyen una vista previa lateral del sitio. Los cambios locales se envían al preview en tiempo real, incluso antes de publicar en Supabase. El preview permite alternar EN/ES y tamaños Desktop, Tablet y Mobile.
+
+
+## V8.3 — Media manager por sección
+
+El CMS incorpora un administrador visual de medios dentro de cada sección. Los medios existentes se muestran con preview y se pueden reemplazar desde Supabase Storage, subir desde el equipo, enlazar mediante una URL externa o usar un video de YouTube. Las secciones con tarjetas permiten usar imagen, video o YouTube en cada item. Todas las secciones excepto el Hero —que conserva un único video de YouTube— admiten una galería adicional con múltiples imágenes/videos y presentación en grilla, rail horizontal o destacado.
