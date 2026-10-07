@@ -51,3 +51,7 @@ Las vistas de Inicio, Contenido, Diseño, Navegación y Ajustes incluyen una vis
 ## V8.3 — Media manager por sección
 
 El CMS incorpora un administrador visual de medios dentro de cada sección. Los medios existentes se muestran con preview y se pueden reemplazar desde Supabase Storage, subir desde el equipo, enlazar mediante una URL externa o usar un video de YouTube. Las secciones con tarjetas permiten usar imagen, video o YouTube en cada item. Todas las secciones excepto el Hero —que conserva un único video de YouTube— admiten una galería adicional con múltiples imágenes/videos y presentación en grilla, rail horizontal o destacado.
+
+
+## V8.4 — Media framing controls
+This build preserves existing Supabase CMS content. It adds per-media framing, YouTube timing, captions and clean embed controls. No database reset or new schema execution is required. See `MEDIA_CONTROLS_V8_4.md`.

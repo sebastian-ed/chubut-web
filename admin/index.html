@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=8.3.0">
+  <link rel="stylesheet" href="admin.css?v=8.4.0">
 </head>
 <body>
   <div class="admin-shell" id="adminShell">
@@ -138,7 +138,7 @@
         </section>
         <section class="picker-panel" data-picker-panel="youtube">
           <div class="picker-source-form">
-            <label class="field"><span>Video de YouTube</span><input id="pickerYoutubeValue" type="text" placeholder="URL de YouTube o ID del video"><small>Acepta youtube.com, youtu.be, Shorts, Embed o directamente el ID.</small></label>
+            <label class="field"><span>Video de YouTube</span><input id="pickerYoutubeValue" type="text" placeholder="URL de YouTube o ID del video"><small>Acepta youtube.com, youtu.be, Shorts, Embed o directamente el ID. Si el enlace contiene “t=” o “start=”, el CMS guarda ese inicio automáticamente.</small></label><p class="youtube-picker-info" id="youtubePickerInfo"></p>
             <div class="youtube-picker-preview" id="youtubePickerPreview"><span>YOUTUBE</span></div>
             <button class="btn primary" id="pickerUseYoutube" type="button">Usar video</button>
           </div>
@@ -154,6 +154,6 @@
   <script src="../js/supabase-config.js"></script>
   <script src="../js/content.js"></script>
   <script src="../js/supabase.js"></script>
-  <script src="admin.js?v=8.3.0"></script>
+  <script src="admin.js?v=8.4.0"></script>
 </body>
 </html>

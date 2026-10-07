@@ -32,29 +32,47 @@
     if(/^[A-Za-z0-9_-]{6,20}$/.test(raw) && !raw.includes('/'))return raw;
     try{const u=new URL(raw);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0]||'';if(u.searchParams.get('v'))return u.searchParams.get('v');const m=u.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/);return m?.[1]||''}catch(_e){const m=raw.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{6,20})/);return m?.[1]||raw}
   }
-  function mediaElement(type, src, className, poster='', options={}) {
+  function mediaDefaults(type='image',context='visual'){
+    const interactive=context==='videoGallery'||context==='additional';
+    return {fit:'cover',positionX:'center',positionY:'center',zoom:100,frameRatio:'auto',autoplay:!interactive,mute:true,loop:true,controls:interactive,captions:false,cleanEmbed:!interactive,startAt:0,endAt:0};
+  }
+  function resolvedMediaOptions(type,options={},context='visual'){return {...mediaDefaults(type,context),...(options||{})}}
+  function posPct(value,axis='x'){if(value==='left'||value==='top')return 0;if(value==='right'||value==='bottom')return 100;return 50}
+  function frameRatioStyle(value){return value&&value!=='auto'?`aspect-ratio:${String(value).replace('/',' / ')};`:''}
+  function mediaElement(type, src, className, poster='', options={}, context='visual') {
     const source=String(src||''); if(!source)return `<div class="${esc(className)} media-object media-empty"></div>`;
+    const o=resolvedMediaOptions(type,options,context),x=posPct(o.positionX,'x'),y=posPct(o.positionY,'y'),zoom=Math.max(.7,Math.min(2.2,(Number(o.zoom)||100)/100));
     if(type==='youtube'){
-      const id=youtubeId(source);const autoplay=options.autoplay!==false;
-      return `<iframe class="${esc(className)} media-object visual-youtube" src="https://www.youtube-nocookie.com/embed/${esc(id)}?${autoplay?'autoplay=1&mute=1&loop=1&playlist='+esc(id)+'&':''}controls=${options.controls?'1':'0'}&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" title="Chubut video" loading="lazy"></iframe>`;
+      const id=youtubeId(source),clean=Boolean(o.cleanEmbed),controls=clean?false:Boolean(o.controls),autoplay=Boolean(o.autoplay),mute=Boolean(o.mute),loop=Boolean(o.loop);
+      const params=new URLSearchParams({autoplay:autoplay?'1':'0',mute:mute?'1':'0',controls:controls?'1':'0',playsinline:'1',rel:'0',modestbranding:'1',iv_load_policy:'3',cc_load_policy:o.captions?'1':'0',fs:controls?'1':'0'});
+      if(loop){params.set('loop','1');params.set('playlist',id)}
+      if(Number(o.startAt)>0)params.set('start',String(Math.floor(Number(o.startAt))));
+      if(Number(o.endAt)>0)params.set('end',String(Math.floor(Number(o.endAt))));
+      if(clean)params.set('disablekb','1');
+      const fit=o.fit==='contain'?'contain':'cover';
+      const left=fit==='contain'?0:(o.positionX==='left'?0:o.positionX==='right'?-80:-40),top=fit==='contain'?0:(o.positionY==='top'?0:o.positionY==='bottom'?-30:-15);
+      const width=fit==='contain'?100:180,height=fit==='contain'?100:130;
+      return `<iframe class="${esc(className)} media-object visual-youtube ${clean?'youtube-clean':''}" style="width:${width}%;height:${height}%;left:${left}%;top:${top}%;transform:scale(${zoom});transform-origin:${x}% ${y}%;" src="https://www.youtube-nocookie.com/embed/${esc(id)}?${params.toString()}" allow="autoplay; encrypted-media; picture-in-picture" title="Chubut video" loading="lazy"></iframe>`;
     }
-    if(type==='video')return `<video class="${esc(className)} media-object visual-video" ${options.autoplay===false?'': 'autoplay muted loop'} playsinline ${options.controls?'controls':''} preload="metadata" ${poster?`poster="${esc(poster)}"`:''} src="${esc(source)}"></video>`;
-    return `<div class="${esc(className)} media-object visual-image" style="background-image:url('${esc(source)}')"></div>`;
+    if(type==='video'){
+      return `<video class="${esc(className)} media-object visual-video" style="object-fit:${o.fit==='contain'?'contain':'cover'};object-position:${x}% ${y}%;transform:scale(${zoom});transform-origin:${x}% ${y}%;" ${o.autoplay?'autoplay':''} ${o.mute?'muted':''} ${o.loop?'loop':''} playsinline ${o.controls?'controls':''} preload="metadata" ${poster?`poster="${esc(poster)}"`:''} src="${esc(source)}"></video>`;
+    }
+    return `<div class="${esc(className)} media-object visual-image" style="background-image:url('${esc(source)}');background-size:${o.fit==='contain'?'contain':'cover'};background-position:${x}% ${y}%;background-repeat:no-repeat;transform:scale(${zoom});transform-origin:${x}% ${y}%;"></div>`;
   }
   function primaryMedia(section,className,options={}) {
     const m=section?.media||{};const type=m.type||(m.youtubeId?'youtube':(m.video?'video':'image'));
     const src=type==='youtube'?(m.youtubeId||m.src||''):type==='video'?(m.video||m.src||''):(m.image||m.src||'');
-    return mediaElement(type,src,className,m.image||'',options);
+    return mediaElement(type,src,className,m.image||'',{...(m.options||{}),...(options||{})},'visual');
   }
   function itemVisual(item,className) {
     const type=item?.mediaType||'image';const src=item?.mediaSrc||(type==='image'?item?.image:'')||item?.image||'';
-    return mediaElement(type,src,className,item?.image||'',{autoplay:true,controls:false});
+    return mediaElement(type,src,className,item?.image||'',item?.mediaOptions||{},'visual');
   }
   function renderAdditionalMedia(section){
     if(section?.type==='heroVideo')return '';
     const items=section?.mediaGallery||[];if(!items.length)return '';
     const mode=section.mediaGalleryMode||'grid';
-    return `<section class="section additional-media-section mode-${esc(mode)}" aria-label="${lang==='es'?'Galería multimedia':'Media gallery'}"><div class="wrap additional-media-grid">${items.map((m,i)=>`<figure class="additional-media-card additional-${esc(m.type||'image')}">${mediaElement(m.type||'image',m.src||'','additional-media-object',m.poster||'',{autoplay:false,controls:true})}<figcaption>${String(i+1).padStart(2,'0')}</figcaption></figure>`).join('')}</div></section>`;
+    return `<section class="section additional-media-section mode-${esc(mode)}" aria-label="${lang==='es'?'Galería multimedia':'Media gallery'}"><div class="wrap additional-media-grid">${items.map((m,i)=>{const o=resolvedMediaOptions(m.type||'image',m.options||{},'additional');return `<figure class="additional-media-card additional-${esc(m.type||'image')}" style="${frameRatioStyle(o.frameRatio)}">${mediaElement(m.type||'image',m.src||'','additional-media-object',m.poster||'',m.options||{},'additional')}<figcaption>${String(i+1).padStart(2,'0')}</figcaption></figure>`}).join('')}</div></section>`;
   }
 
   function fontQuery(font) {
@@ -115,7 +133,7 @@
     const x = c(s), st = s.settings || {}, youtubeId = s.media?.youtubeId || '';
     return `<section class="hero-video" id="${esc(st.anchor || s.id)}" style="--hero-overlay:${Math.min(90, Math.max(0, Number(st.overlay) || 58)) / 100};--hero-height:${Number(st.minHeight) || 92}svh">
       <div class="hero-video-media" aria-hidden="true">
-        <iframe src="https://www.youtube-nocookie.com/embed/${esc(youtubeId)}?autoplay=1&mute=1&controls=0&loop=1&playlist=${esc(youtubeId)}&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" title="Chubut Patagonia"></iframe>
+        ${mediaElement('youtube',youtubeId,'hero-youtube-embed','',s.media?.options||{},'hero')}
       </div>
       <div class="hero-video-overlay"></div>
       <div class="hero-content wrap align-${esc(st.align || 'left')}">
@@ -168,15 +186,16 @@
     const firstMedia = first ? videoMedia(first, true) : '';
     return `<section class="section video-section" id="${esc(st.anchor || s.id)}"><div class="wrap section-head reveal"><div><span class="eyebrow">${x.eyebrow || ''}</span><h2>${x.title || ''}</h2></div><p>${esc(x.body || '')}</p></div>
       <div class="wrap video-stage-wrap reveal">
-        <div class="video-stage" id="videoStage">${firstMedia}<div class="video-stage-overlay"></div><div class="video-stage-copy"><small id="videoStageEyebrow">${esc(first ? itemContent(first).eyebrow || '' : '')}</small><h3 id="videoStageTitle">${esc(first ? itemContent(first).title || '' : '')}</h3></div></div>
+        <div class="video-stage" id="videoStage" style="${frameRatioStyle(resolvedMediaOptions(first?.type==='youtube'?'youtube':'video',first?.mediaOptions||{},'videoGallery').frameRatio)}">${firstMedia}<div class="video-stage-overlay"></div><div class="video-stage-copy"><small id="videoStageEyebrow">${esc(first ? itemContent(first).eyebrow || '' : '')}</small><h3 id="videoStageTitle">${esc(first ? itemContent(first).title || '' : '')}</h3></div></div>
         <div class="video-thumbs" style="--cols:${Number(st.columns) || 3}">${items.map((item, i) => { const y = itemContent(item); return `<button type="button" class="video-thumb ${i === 0 ? 'active' : ''}" data-video-index="${i}"><span class="video-thumb-image" style="background-image:url('${esc(item.image || '')}')"><i>▶</i></span><small>${esc(y.eyebrow || '')}</small><strong>${esc(y.title || '')}</strong></button>`; }).join('')}</div>
       </div></section>`;
   }
 
   function videoMedia(item, autoplay = false) {
     if (!item) return '';
-    if (item.type === 'youtube') return `<iframe class="stage-media" src="https://www.youtube-nocookie.com/embed/${esc(item.src)}?${autoplay ? 'autoplay=1&mute=1&' : ''}controls=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" title="Chubut video"></iframe>`;
-    return `<video class="stage-media" ${autoplay ? 'autoplay muted' : ''} loop playsinline controls preload="metadata" src="${esc(item.src || '')}"></video>`;
+    const type=item.type==='youtube'?'youtube':'video',opts={...(item.mediaOptions||{})};
+    if(autoplay && opts.autoplay===undefined)opts.autoplay=true;
+    return mediaElement(type,item.src||'','stage-media',item.image||'',opts,'videoGallery');
   }
 
   function renderDestinationGrid(s) {
@@ -219,6 +238,7 @@
       const old = $('.stage-media', stage);
       if (old) old.remove();
       stage.insertAdjacentHTML('afterbegin', videoMedia(item, true));
+      stage.style.aspectRatio = resolvedMediaOptions(item.type==='youtube'?'youtube':'video',item.mediaOptions||{},'videoGallery').frameRatio==='auto' ? '' : resolvedMediaOptions(item.type==='youtube'?'youtube':'video',item.mediaOptions||{},'videoGallery').frameRatio.replace('/',' / ');
       $$('.video-thumb').forEach(x => x.classList.remove('active'));
       btn.classList.add('active');
       const y = itemContent(item);

@@ -190,11 +190,32 @@
     return 'image';
   }
   function assetKind(asset){return (asset?.mime_type||'').startsWith('video/')?'video':mediaKindFromUrl(asset?.url||'')}
-  function youtubeId(value=''){
-    const raw=String(value||'').trim(); if(!raw)return '';
-    if(/^[A-Za-z0-9_-]{6,20}$/.test(raw) && !raw.includes('/'))return raw;
-    try{const u=new URL(raw);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0]||'';if(u.searchParams.get('v'))return u.searchParams.get('v');const m=u.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/);return m?.[1]||''}catch(_e){const m=raw.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{6,20})/);return m?.[1]||raw}
+  function parseYoutubeTime(value=''){
+    const raw=String(value||'').trim(); if(!raw)return 0;
+    if(/^\d+$/.test(raw))return Number(raw);
+    let total=0; const h=raw.match(/(\d+)h/i),m=raw.match(/(\d+)m/i),sec=raw.match(/(\d+)s/i);
+    if(h)total+=Number(h[1])*3600;if(m)total+=Number(m[1])*60;if(sec)total+=Number(sec[1]);
+    return total||0;
   }
+  function youtubeMeta(value=''){
+    const raw=String(value||'').trim(); if(!raw)return {id:'',startAt:0,endAt:0};
+    if(/^[A-Za-z0-9_-]{6,20}$/.test(raw) && !raw.includes('/'))return {id:raw,startAt:0,endAt:0};
+    try{
+      const u=new URL(raw);let id='';
+      if(u.hostname.includes('youtu.be'))id=u.pathname.split('/').filter(Boolean)[0]||'';
+      else if(u.searchParams.get('v'))id=u.searchParams.get('v');
+      else id=u.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/)?.[1]||'';
+      const hash=new URLSearchParams((u.hash||'').replace(/^#/,''));
+      const start=parseYoutubeTime(u.searchParams.get('t')||u.searchParams.get('start')||hash.get('t')||hash.get('start')||'');
+      const end=parseYoutubeTime(u.searchParams.get('end')||hash.get('end')||'');
+      return {id,startAt:start,endAt:end};
+    }catch(_e){
+      const m=raw.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{6,20})/);
+      const tm=raw.match(/[?&#](?:t|start)=([^&#]+)/i),em=raw.match(/[?&#]end=([^&#]+)/i);
+      return {id:m?.[1]||raw,startAt:parseYoutubeTime(tm?.[1]||''),endAt:parseYoutubeTime(em?.[1]||'')};
+    }
+  }
+  function youtubeId(value=''){return youtubeMeta(value).id}
   function sectionMediaCount(section){
     let n=0;const m=section?.media||{};
     if(m.youtubeId||m.image||m.video||m.src)n++;
@@ -219,6 +240,18 @@
     return `<article class="media-slot-card"><div class="media-slot-preview">${mediaPreviewHtml(type,src,poster)}</div><div class="media-slot-meta"><span>${esc(eyebrow)}</span><strong>${esc(title)}</strong><small>${src?esc(type==='youtube'?`YouTube · ${youtubeId(src)}`:src):'No hay un archivo asignado.'}</small>${note?`<p>${esc(note)}</p>`:''}</div><div class="media-slot-actions"><button class="btn ghost" type="button" data-media-edit="${esc(edit)}" ${index!==''?`data-media-index="${index}"`:''} data-media-allow="${esc(allow)}">Reemplazar</button>${canClear?`<button class="icon-btn danger" type="button" data-media-clear="${esc(edit)}" ${index!==''?`data-media-index="${index}"`:''} title="Quitar">×</button>`:''}</div></article>`;
   }
   function itemVisual(it){const type=it.mediaType||'image';return {type,src:it.mediaSrc||(type==='image'?it.image:'')||it.image||'',poster:it.image||''}}
+  function mediaDefaults(type='image',context='visual'){
+    const interactive=context==='videoGallery'||context==='additional';
+    return {fit:'cover',positionX:'center',positionY:'center',zoom:100,frameRatio:'auto',autoplay:!interactive,mute:true,loop:true,controls:interactive,captions:false,cleanEmbed:!interactive,startAt:0,endAt:0};
+  }
+  function mediaSettingsHtml(path,type='image',context='visual'){
+    const raw=getPath(draftSection,path)||{},d=mediaDefaults(type,context),o={...d,...raw};
+    const pos=(name,vals)=>`<label class="field"><span>${name}</span><select data-draft="${path}.${name==='Posición horizontal'?'positionX':'positionY'}">${vals.map(v=>`<option value="${v}" ${o[name==='Posición horizontal'?'positionX':'positionY']===v?'selected':''}>${v==='left'?'Izquierda':v==='right'?'Derecha':v==='top'?'Arriba':v==='bottom'?'Abajo':'Centro'}</option>`).join('')}</select></label>`;
+    let html=`<details class="media-display-settings" open><summary><span>Visualización y encuadre</span><small>${type==='youtube'?'YouTube':type==='video'?'Video':'Imagen'}</small></summary><div class="media-settings-grid"><label class="field"><span>Ajuste dentro del espacio</span><select data-draft="${path}.fit"><option value="cover" ${o.fit==='cover'?'selected':''}>Cubrir todo (recorta)</option><option value="contain" ${o.fit==='contain'?'selected':''}>Mostrar completo</option></select></label>${pos('Posición horizontal',['left','center','right'])}${pos('Posición vertical',['top','center','bottom'])}<label class="field"><span>Zoom (%)</span><input type="number" min="70" max="220" step="5" data-draft="${path}.zoom" value="${Number(o.zoom)||100}"><small>100 = tamaño normal. Aumentalo para acercar el encuadre.</small></label><label class="field"><span>Proporción del marco</span><select data-draft="${path}.frameRatio"><option value="auto" ${o.frameRatio==='auto'?'selected':''}>Automática / diseño</option><option value="21/9" ${o.frameRatio==='21/9'?'selected':''}>Cinemática 21:9</option><option value="16/9" ${o.frameRatio==='16/9'?'selected':''}>Horizontal 16:9</option><option value="4/3" ${o.frameRatio==='4/3'?'selected':''}>Clásica 4:3</option><option value="1/1" ${o.frameRatio==='1/1'?'selected':''}>Cuadrada 1:1</option><option value="9/16" ${o.frameRatio==='9/16'?'selected':''}>Vertical 9:16</option></select></label></div>`;
+    if(type==='video'||type==='youtube')html+=`<div class="media-settings-divider"><span>Reproducción</span></div><div class="media-settings-grid compact"><label class="field checkbox-field"><input type="checkbox" data-draft="${path}.autoplay" ${o.autoplay?'checked':''}><span>Autoplay</span></label><label class="field checkbox-field"><input type="checkbox" data-draft="${path}.mute" ${o.mute?'checked':''}><span>Sin sonido al iniciar</span></label><label class="field checkbox-field"><input type="checkbox" data-draft="${path}.loop" ${o.loop?'checked':''}><span>Repetir en loop</span></label><label class="field checkbox-field"><input type="checkbox" data-draft="${path}.controls" ${o.controls?'checked':''}><span>Mostrar controles</span></label></div>`;
+    if(type==='youtube')html+=`<div class="media-settings-divider"><span>YouTube</span></div><div class="media-settings-grid"><label class="field"><span>Comenzar en (segundos)</span><input type="number" min="0" step="1" data-draft="${path}.startAt" value="${Number(o.startAt)||0}"><small>Si pegás un enlace con “Comenzar en…”, se completa automáticamente.</small></label><label class="field"><span>Finalizar en (segundos)</span><input type="number" min="0" step="1" data-draft="${path}.endAt" value="${Number(o.endAt)||0}"></label><label class="field checkbox-field"><input type="checkbox" data-draft="${path}.captions" ${o.captions?'checked':''}><span>Mostrar subtítulos</span></label><label class="field checkbox-field"><input type="checkbox" data-draft="${path}.cleanEmbed" ${o.cleanEmbed?'checked':''}><span>Modo limpio / minimizar interfaz de YouTube</span><small>Desactiva interacción y controles para evitar títulos y overlays al pasar el mouse.</small></label></div>`;
+    return html+`</details>`;
+  }
   function renderPickerLibrary(){
     const grid=$('#pickerLibraryGrid'),empty=$('#pickerEmpty'); if(!grid)return;
     const q=($('#pickerSearch')?.value||'').trim().toLowerCase(); const allowed=mediaPickerTarget?.allowed||['image','video','youtube'];
@@ -243,28 +276,32 @@
   function closeMediaPicker(){mediaPickerTarget=null;$('#mediaPickerBackdrop').classList.add('hidden')}
   function applyMediaSelection(selection){
     const t=mediaPickerTarget;if(!t||!draftSection)return;
-    if(t.mode==='hero'){draftSection.media=draftSection.media||{};draftSection.media.youtubeId=youtubeId(selection.src);draftSection.media.src=draftSection.media.youtubeId}
+    const timing={startAt:Number(selection.startAt)||0,endAt:Number(selection.endAt)||0};
+    if(t.mode==='hero'){
+      draftSection.media=draftSection.media||{};draftSection.media.youtubeId=youtubeId(selection.src);draftSection.media.src=draftSection.media.youtubeId;
+      draftSection.media.options={...(draftSection.media.options||{}),...timing};
+    }
     if(t.mode==='sectionPrimary'){
       draftSection.media=draftSection.media||{};draftSection.media.type=selection.type;draftSection.media.src=selection.src;
       if(selection.type==='image')draftSection.media.image=selection.src;
       if(selection.type==='video')draftSection.media.video=selection.src;
-      if(selection.type==='youtube')draftSection.media.youtubeId=youtubeId(selection.src);
+      if(selection.type==='youtube'){draftSection.media.youtubeId=youtubeId(selection.src);draftSection.media.src=draftSection.media.youtubeId;draftSection.media.options={...(draftSection.media.options||{}),...timing};}
     }
     if(t.mode==='itemVisual'){
-      const it=draftSection.items?.[t.index];if(it){it.mediaType=selection.type;it.mediaSrc=selection.type==='youtube'?youtubeId(selection.src):selection.src;if(selection.type==='image')it.image=selection.src}
+      const it=draftSection.items?.[t.index];if(it){it.mediaType=selection.type;it.mediaSrc=selection.type==='youtube'?youtubeId(selection.src):selection.src;if(selection.type==='image')it.image=selection.src;if(selection.type==='youtube')it.mediaOptions={...(it.mediaOptions||{}),...timing};}
     }
     if(t.mode==='videoSource'){
-      const it=draftSection.items?.[t.index];if(it){it.type=selection.type==='youtube'?'youtube':'video';it.src=selection.type==='youtube'?youtubeId(selection.src):selection.src}
+      const it=draftSection.items?.[t.index];if(it){it.type=selection.type==='youtube'?'youtube':'video';it.src=selection.type==='youtube'?youtubeId(selection.src):selection.src;if(selection.type==='youtube')it.mediaOptions={...(it.mediaOptions||{}),...timing};}
     }
     if(t.mode==='poster'){const it=draftSection.items?.[t.index];if(it)it.image=selection.src}
     if(t.mode==='galleryItem'){
-      const g=draftSection.mediaGallery?.[t.index];if(g){g.type=selection.type;g.src=selection.type==='youtube'?youtubeId(selection.src):selection.src}
+      const g=draftSection.mediaGallery?.[t.index];if(g){g.type=selection.type;g.src=selection.type==='youtube'?youtubeId(selection.src):selection.src;if(selection.type==='youtube')g.options={...(g.options||{}),...timing};}
     }
     if(t.mode==='appendGallery'){
-      draftSection.mediaGallery=draftSection.mediaGallery||[];draftSection.mediaGallery.push({id:uid('media'),type:selection.type,src:selection.type==='youtube'?youtubeId(selection.src):selection.src})
+      draftSection.mediaGallery=draftSection.mediaGallery||[];draftSection.mediaGallery.push({id:uid('media'),type:selection.type,src:selection.type==='youtube'?youtubeId(selection.src):selection.src,options:selection.type==='youtube'?timing:{}})
     }
     if(t.mode==='appendVideo'){
-      draftSection.items=draftSection.items||[];draftSection.items.push({id:uid('vid'),type:selection.type==='youtube'?'youtube':'video',src:selection.type==='youtube'?youtubeId(selection.src):selection.src,image:'',content:{en:{eyebrow:'CHUBUT IN MOTION',title:'New video'},es:{eyebrow:'CHUBUT EN MOVIMIENTO',title:'Nuevo video'}}})
+      draftSection.items=draftSection.items||[];draftSection.items.push({id:uid('vid'),type:selection.type==='youtube'?'youtube':'video',src:selection.type==='youtube'?youtubeId(selection.src):selection.src,image:'',mediaOptions:selection.type==='youtube'?timing:{},content:{en:{eyebrow:'CHUBUT IN MOTION',title:'New video'},es:{eyebrow:'CHUBUT EN MOVIMIENTO',title:'Nuevo video'}}})
     }
     closeMediaPicker();renderDrawer();scheduleLivePreview();
   }
@@ -332,30 +369,33 @@
   function labelForKey(k){return ({eyebrow:'Eyebrow / categoría',title:'Título',body:'Texto',cta:'CTA',ctaHref:'Enlace CTA',secondary:'CTA secundario',secondaryHref:'Enlace secundario',meta:'Meta',sideTitle:'Título lateral',sideBody:'Texto lateral',fact1Label:'Dato 1 · etiqueta',fact1Value:'Dato 1 · valor',fact2Label:'Dato 2 · etiqueta',fact2Value:'Dato 2 · valor',image:'Imagen',href:'Enlace',src:'Video / YouTube ID',size:'Tamaño',type:'Tipo',icon:'Ícono',formEyebrow:'Form · eyebrow',formTitle:'Form · título',nameLabel:'Form · nombre',namePlaceholder:'Form · placeholder',interestLabel:'Form · interés',submit:'Form · botón',success:'Mensaje éxito',error:'Mensaje error',note1Title:'Nota 1 · título',note1Body:'Nota 1 · texto',note2Title:'Nota 2 · título',note2Body:'Nota 2 · texto'})[k]||k.replace(/([A-Z])/g,' $1')}
   function mediaEditorHtml(){
     const type=draftSection.type;
-    let html=`<div class="drawer-group media-overview"><div class="drawer-group-head"><div><h3>Medios de la sección</h3><p>Acá podés identificar y reemplazar cada imagen o video sin buscar URLs dentro del contenido.</p></div><span class="media-count-pill">${sectionMediaCount(draftSection)} medios</span></div>`;
+    let html=`<div class="drawer-group media-overview"><div class="drawer-group-head"><div><h3>Medios de la sección</h3><p>Identificá, reemplazá y ajustá el encuadre de cada imagen o video. Los cambios se ven instantáneamente en la vista previa.</p></div><span class="media-count-pill">${sectionMediaCount(draftSection)} medios</span></div>`;
     if(type==='heroVideo'){
       const m=currentSectionPrimary();
-      html+=mediaSlotHtml({title:'Video principal del Hero',eyebrow:'HERO · YOUTUBE',type:'youtube',src:m.src,edit:'hero',allow:'youtube',canClear:false,note:'El hero mantiene un único video de YouTube, tal como está definido para la portada.'});
+      html+=mediaSlotHtml({title:'Video principal del Hero',eyebrow:'HERO · YOUTUBE',type:'youtube',src:m.src,edit:'hero',allow:'youtube',canClear:false,note:'Podés pegar un enlace de YouTube con tiempo de inicio. El Hero conserva un único video.'});
+      html+=mediaSettingsHtml('media.options','youtube','hero');
     }else if(['editorialIntro','splitFeature','fullBleed'].includes(type)){
       const m=currentSectionPrimary();
       html+=mediaSlotHtml({title:'Visual principal',eyebrow:'MEDIO PRINCIPAL',type:m.type,src:m.src,poster:m.poster,edit:'sectionPrimary',allow:'image,video,youtube',note:'Puede ser imagen, video alojado o YouTube.'});
+      html+=mediaSettingsHtml('media.options',m.type,'visual');
     }else if(type==='videoGallery'){
       html+=`<div class="media-editor-heading"><strong>Videos de la galería</strong><button class="btn ghost" type="button" id="addVideoItem">+ Agregar video</button></div>`;
       (draftSection.items||[]).forEach((it,i)=>{
-        html+=`<div class="media-item-stack">${mediaSlotHtml({title:it.content?.en?.title||`Video ${i+1}`,eyebrow:`VIDEO ${String(i+1).padStart(2,'0')}`,type:it.type==='youtube'?'youtube':'video',src:it.src||'',poster:it.image||'',edit:'videoSource',index:i,allow:'video,youtube',canClear:false})}${mediaSlotHtml({title:'Imagen de portada / thumbnail',eyebrow:'POSTER',type:'image',src:it.image||'',edit:'poster',index:i,allow:'image',note:'Se usa en la miniatura del video.'})}</div>`;
+        const t=it.type==='youtube'?'youtube':'video';
+        html+=`<div class="media-item-stack">${mediaSlotHtml({title:it.content?.en?.title||`Video ${i+1}`,eyebrow:`VIDEO ${String(i+1).padStart(2,'0')}`,type:t,src:it.src||'',poster:it.image||'',edit:'videoSource',index:i,allow:'video,youtube',canClear:false})}${mediaSettingsHtml(`items.${i}.mediaOptions`,t,'videoGallery')}${mediaSlotHtml({title:'Imagen de portada / thumbnail',eyebrow:'POSTER',type:'image',src:it.image||'',edit:'poster',index:i,allow:'image',note:'Se usa en la miniatura del video.'})}</div>`;
       });
     }else if(['cardGrid','destinationGrid'].includes(type)){
       html+=`<div class="media-editor-heading"><strong>Visuales de las tarjetas</strong><span>Cada tarjeta puede usar imagen, video o YouTube.</span></div>`;
-      (draftSection.items||[]).forEach((it,i)=>{const m=itemVisual(it);html+=`<div class="media-item-stack">${mediaSlotHtml({title:it.content?.en?.title||`Item ${i+1}`,eyebrow:`ITEM ${String(i+1).padStart(2,'0')}`,type:m.type,src:m.src,poster:m.poster,edit:'itemVisual',index:i,allow:'image,video,youtube',note:m.type!=='image'?'La imagen existente se conserva como poster del video.':''})}</div>`});
+      (draftSection.items||[]).forEach((it,i)=>{const m=itemVisual(it);html+=`<div class="media-item-stack">${mediaSlotHtml({title:it.content?.en?.title||`Item ${i+1}`,eyebrow:`ITEM ${String(i+1).padStart(2,'0')}`,type:m.type,src:m.src,poster:m.poster,edit:'itemVisual',index:i,allow:'image,video,youtube',note:m.type!=='image'?'La imagen existente se conserva como poster del video.':''})}${mediaSettingsHtml(`items.${i}.mediaOptions`,m.type,'visual')}</div>`});
     }else{
       html+=`<div class="media-empty-state"><span>▧</span><div><strong>Esta sección no tiene un visual principal.</strong><p>Podés agregar imágenes o videos a la galería adicional de abajo.</p></div></div>`;
     }
     html+=`</div>`;
     if(type!=='heroVideo'){
       const gallery=draftSection.mediaGallery||[];
-      html+=`<div class="drawer-group"><div class="drawer-group-head"><div><h3>Galería adicional</h3><p>Sumá tantos medios como necesites. Solo aparece en la web si agregás contenido.</p></div><button class="btn primary" type="button" id="addSectionMedia">+ Agregar medio</button></div><label class="field media-layout-field"><span>Presentación</span><select data-draft="mediaGalleryMode"><option value="grid" ${draftSection.mediaGalleryMode==='grid'||!draftSection.mediaGalleryMode?'selected':''}>Grilla editorial</option><option value="rail" ${draftSection.mediaGalleryMode==='rail'?'selected':''}>Carrusel horizontal</option><option value="feature" ${draftSection.mediaGalleryMode==='feature'?'selected':''}>Destacado</option></select></label><div class="section-media-list">${gallery.map((g,i)=>`<div class="gallery-media-row">${mediaSlotHtml({title:`Medio adicional ${i+1}`,eyebrow:(g.type||'image').toUpperCase(),type:g.type||'image',src:g.src||'',poster:g.poster||'',edit:'galleryItem',index:i,allow:'image,video,youtube'})}<div class="gallery-order-actions"><button class="icon-btn" data-gallery-move="up" data-media-index="${i}" type="button">↑</button><button class="icon-btn" data-gallery-move="down" data-media-index="${i}" type="button">↓</button></div></div>`).join('')||'<div class="media-empty-state compact"><span>＋</span><div><strong>Sin medios adicionales</strong><p>Usá “Agregar medio” para sumar imágenes, videos o YouTube.</p></div></div>'}</div></div>`;
+      html+=`<div class="drawer-group"><div class="drawer-group-head"><div><h3>Galería adicional</h3><p>Sumá tantos medios como necesites. Solo aparece en la web si agregás contenido.</p></div><button class="btn primary" type="button" id="addSectionMedia">+ Agregar medio</button></div><label class="field media-layout-field"><span>Presentación</span><select data-draft="mediaGalleryMode"><option value="grid" ${draftSection.mediaGalleryMode==='grid'||!draftSection.mediaGalleryMode?'selected':''}>Grilla editorial</option><option value="rail" ${draftSection.mediaGalleryMode==='rail'?'selected':''}>Carrusel horizontal</option><option value="feature" ${draftSection.mediaGalleryMode==='feature'?'selected':''}>Destacado</option></select></label><div class="section-media-list">${gallery.map((g,i)=>`<div class="gallery-media-row">${mediaSlotHtml({title:`Medio adicional ${i+1}`,eyebrow:(g.type||'image').toUpperCase(),type:g.type||'image',src:g.src||'',poster:g.poster||'',edit:'galleryItem',index:i,allow:'image,video,youtube'})}${mediaSettingsHtml(`mediaGallery.${i}.options`,g.type||'image','additional')}<div class="gallery-order-actions"><button class="icon-btn" data-gallery-move="up" data-media-index="${i}" type="button">↑</button><button class="icon-btn" data-gallery-move="down" data-media-index="${i}" type="button">↓</button></div></div>`).join('')||'<div class="media-empty-state compact"><span>＋</span><div><strong>Sin medios adicionales</strong><p>Usá “Agregar medio” para sumar imágenes, videos o YouTube.</p></div></div>'}</div></div>`;
     }
-    html+=`<div class="drawer-group media-help"><h3>Fuentes disponibles</h3><div class="media-source-options"><span><b>▧</b> Biblioteca Supabase</span><span><b>↑</b> Subir archivo</span><span><b>↗</b> URL externa</span><span><b>▶</b> YouTube</span></div><p>Al tocar “Reemplazar” vas a poder elegir cualquiera de estas fuentes desde un único selector.</p></div>`;
+    html+=`<div class="drawer-group media-help"><h3>Fuentes disponibles</h3><div class="media-source-options"><span><b>▧</b> Biblioteca Supabase</span><span><b>↑</b> Subir archivo</span><span><b>↗</b> URL externa</span><span><b>▶</b> YouTube + timestamp</span></div><p>En YouTube podés pegar el enlace generado con “Comenzar en…” y el CMS detecta automáticamente el segundo inicial. El modo limpio reduce títulos, controles y overlays de YouTube.</p></div>`;
     return html;
   }
   function layoutEditorHtml(){const s=draftSection.settings||{};return `<div class="drawer-group"><h3>Configuración de estructura</h3><div class="form-grid">${Object.entries(s).map(([k,v])=>layoutField(k,v)).join('')}</div></div><div class="drawer-group"><h3>Identificador</h3><label class="field"><span>Anchor / ID</span><input data-draft="settings.anchor" value="${esc(s.anchor||draftSection.id)}"><small>Se usa en los enlaces del menú, por ejemplo #destinations.</small></label></div>`}
@@ -426,8 +466,8 @@
     try{toast(`Subiendo ${file.name}…`);const saved=await db.uploadMedia(file);mediaAssets.unshift(saved);updateMediaDatalist();renderMedia();renderDashboard();applyMediaSelection({type:kind,src:saved.url,name:saved.name});toast('Archivo subido y seleccionado')}catch(err){toast('Error al subir: '+err.message)}finally{e.target.value=''}
   });
   $('#pickerUseUrl').onclick=()=>{const type=$('#pickerUrlType').value,src=$('#pickerUrlValue').value.trim();if(!src){toast('Pegá una URL');return}applyMediaSelection({type,src})};
-  $('#pickerYoutubeValue').addEventListener('input',e=>{const id=youtubeId(e.target.value);$('#youtubePickerPreview').innerHTML=id?`<div style="background-image:url('https://img.youtube.com/vi/${esc(id)}/hqdefault.jpg')"><span>▶</span></div>`:'<span>YOUTUBE</span>'});
-  $('#pickerUseYoutube').onclick=()=>{const id=youtubeId($('#pickerYoutubeValue').value);if(!id){toast('Ingresá una URL o ID de YouTube válido');return}applyMediaSelection({type:'youtube',src:id})};
+  $('#pickerYoutubeValue').addEventListener('input',e=>{const meta=youtubeMeta(e.target.value),id=meta.id;$('#youtubePickerPreview').innerHTML=id?`<div style="background-image:url('https://img.youtube.com/vi/${esc(id)}/hqdefault.jpg')"><span>▶</span></div>`:'<span>YOUTUBE</span>';const info=$('#youtubePickerInfo');if(info)info.textContent=id?(meta.startAt?`Inicio detectado: ${meta.startAt}s`:'Video detectado · inicio 0s'):''});
+  $('#pickerUseYoutube').onclick=()=>{const meta=youtubeMeta($('#pickerYoutubeValue').value);if(!meta.id){toast('Ingresá una URL o ID de YouTube válido');return}applyMediaSelection({type:'youtube',src:meta.id,startAt:meta.startAt,endAt:meta.endAt})};
   $('#mediaUpload').addEventListener('change',async e=>{const files=[...e.target.files];if(!files.length)return;for(const file of files){try{toast(`Subiendo ${file.name}…`);await db.uploadMedia(file)}catch(err){toast(`Error en ${file.name}: ${err.message}`)}}e.target.value='';await loadMedia();toast('Carga finalizada')});
   $('#refreshLeads').onclick=loadLeads; $('#refreshHistory').onclick=loadHistory; $('#refreshPreview').onclick=refreshPreview;
   $('#reloadLivePreview').onclick=reloadLivePreview;
