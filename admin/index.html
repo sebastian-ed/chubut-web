@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=8.1.1">
+  <link rel="stylesheet" href="admin.css?v=8.2.0">
 </head>
 <body>
   <div class="admin-shell" id="adminShell">
@@ -81,6 +81,13 @@
         <section class="admin-view preview-view" data-view-panel="preview"><div class="preview-toolbar"><div><span class="kicker">LIVE SITE</span><strong>Vista previa</strong></div><button class="btn ghost" id="refreshPreview">Recargar</button></div><iframe id="previewFrame" src="../" title="Vista previa del sitio"></iframe></section>
       </main>
 
+      <aside class="editor-drawer" id="editorDrawer" aria-hidden="true">
+        <header><div><span class="kicker" id="drawerKicker">SECCIÓN</span><h2 id="drawerTitle">Editar sección</h2></div><button id="drawerClose" type="button" aria-label="Cerrar editor">×</button></header>
+        <div class="drawer-tabs"><button class="active" data-drawer-tab="content">Contenido</button><button data-drawer-tab="media">Medios</button><button data-drawer-tab="layout">Layout</button><button data-drawer-tab="advanced">Avanzado</button></div>
+        <div class="drawer-body" id="drawerBody"></div>
+        <footer><button class="btn ghost" id="drawerCancel" type="button">Cancelar</button><button class="btn primary" id="drawerDone" type="button">Aplicar cambios</button></footer>
+      </aside>
+
       <aside class="live-preview-panel" id="livePreviewPanel" aria-label="Vista previa en vivo">
         <div class="live-preview-head">
           <div><span class="kicker">VISTA PREVIA</span><strong>Actualización instantánea</strong></div>
@@ -104,7 +111,6 @@
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="editor-drawer" id="editorDrawer" aria-hidden="true"><header><div><span class="kicker" id="drawerKicker">SECCIÓN</span><h2 id="drawerTitle">Editar sección</h2></div><button id="drawerClose">×</button></header><div class="drawer-tabs"><button class="active" data-drawer-tab="content">Contenido</button><button data-drawer-tab="media">Medios</button><button data-drawer-tab="layout">Layout</button><button data-drawer-tab="advanced">Avanzado</button></div><div class="drawer-body" id="drawerBody"></div><footer><button class="btn ghost" id="drawerCancel">Cancelar</button><button class="btn primary" id="drawerDone">Aplicar cambios</button></footer></aside>
 
   <div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" id="modal"><header><div><span class="kicker">BLOQUES</span><h2>Agregar sección</h2></div><button id="modalClose">×</button></header><div class="template-grid" id="templateGrid"></div></div></div>
 
@@ -115,6 +121,6 @@
   <script src="../js/supabase-config.js"></script>
   <script src="../js/content.js"></script>
   <script src="../js/supabase.js"></script>
-  <script src="admin.js?v=8.1.1"></script>
+  <script src="admin.js?v=8.2.0"></script>
 </body>
 </html>

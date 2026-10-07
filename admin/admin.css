@@ -68,3 +68,73 @@
   .editor-drawer.open{transform:none}
   .drawer-backdrop{inset:0}
 }
+
+/* ─────────────────────────────────────────────────────────────
+   V8.2 · INTEGRATED SECTION EDITOR
+   The editor is a real workspace column, never a floating drawer on desktop.
+   ───────────────────────────────────────────────────────────── */
+@media(min-width:1181px){
+  .drawer-backdrop,
+  .drawer-backdrop.open{display:none!important;opacity:0!important;pointer-events:none!important}
+
+  .admin-workspace.editor-open{grid-template-columns:minmax(520px,1.08fr) minmax(430px,.92fr)}
+  .admin-workspace.editor-open .admin-content{display:none!important}
+
+  .editor-drawer,
+  .editor-drawer.open{
+    position:sticky!important;
+    inset:auto!important;
+    top:68px!important;
+    grid-column:1!important;
+    width:100%!important;
+    max-width:none!important;
+    height:calc(100vh - 68px)!important;
+    min-width:0!important;
+    transform:none!important;
+    opacity:1!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+    box-shadow:none!important;
+    border-right:1px solid var(--line);
+    background:#f8f8f6;
+    overflow:hidden;
+    z-index:2;
+    transition:none!important;
+  }
+  .editor-drawer:not(.open){display:none!important}
+  .editor-drawer.open{display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto}
+  .editor-drawer>header{position:relative;z-index:3;flex:0 0 auto}
+  .editor-drawer>header button{position:relative;z-index:4;width:38px;height:38px;display:grid;place-items:center;line-height:1;border-radius:5px}
+  .editor-drawer>header button:hover{background:#f0f0ed}
+  .editor-drawer .drawer-body{min-height:0;overflow:auto;overscroll-behavior:contain}
+  .editor-drawer>footer{position:relative;z-index:3}
+
+  .admin-workspace.editor-open .live-preview-panel{grid-column:2!important}
+}
+
+@media(min-width:761px) and (max-width:1180px){
+  .admin-workspace.editor-open .admin-content{display:none!important}
+  .editor-drawer:not(.open){display:none!important}
+  .editor-drawer.open{
+    display:grid!important;
+    position:relative!important;
+    inset:auto!important;
+    width:100%!important;
+    max-width:none!important;
+    height:calc(100vh - 68px)!important;
+    transform:none!important;
+    opacity:1!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+    box-shadow:none!important;
+    grid-template-rows:auto auto minmax(0,1fr) auto;
+  }
+  .drawer-backdrop,.drawer-backdrop.open{display:none!important}
+}
+
+@media(max-width:760px){
+  .editor-drawer{display:grid!important;position:fixed!important;inset:0 0 0 auto!important;width:min(720px,96vw)!important;height:100vh!important;z-index:120!important;transform:translateX(102%)!important;opacity:1!important;visibility:visible!important;pointer-events:none!important;grid-template-rows:auto auto minmax(0,1fr) auto;transition:transform .2s ease!important}
+  .editor-drawer.open{transform:none!important;pointer-events:auto!important}
+  .drawer-backdrop{display:block!important;position:fixed!important;inset:0!important;z-index:110!important;background:rgba(0,0,0,.35)!important;opacity:0!important;pointer-events:none!important}
+  .drawer-backdrop.open{opacity:1!important;pointer-events:auto!important}
+}

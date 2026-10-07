@@ -104,6 +104,7 @@
   }
 
   function switchView(view) {
+    if (editingIndex !== null) closeDrawer();
     $$('.admin-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     $$('.admin-view').forEach(p => p.classList.toggle('active', p.dataset.viewPanel === view));
     $('#viewTitle').textContent = titles[view] || 'CMS';
@@ -191,8 +192,31 @@
   async function loadHistory(){if(!db.configured){revisions=[];renderHistory();return}try{revisions=await db.listRevisions(50);renderHistory()}catch(e){toast('Error: '+e.message)}}
   function renderHistory(){$('#historyList').innerHTML=revisions.length?revisions.map(r=>`<article class="history-row"><div><strong>${esc(r.note||'Publicación')}</strong><small>${new Date(r.created_at).toLocaleString('es-AR')} · ${esc(r.id.slice(0,8))}</small></div><button class="btn ghost" data-restore="${r.id}">Restaurar</button></article>`).join(''):`<div class="panel"><p style="margin:0;font-size:11px;color:#777">No hay revisiones. Se crean automáticamente al publicar.</p></div>`;$$('[data-restore]').forEach(b=>b.onclick=async()=>{if(!confirm('¿Restaurar esta revisión y publicarla como versión actual?'))return;try{const payload=await db.getRevision(b.dataset.restore);state=mergeDeep(clone(defaults),payload);renderAllAdmin();markDirty();await saveAll('Restauración de revisión');toast('Revisión restaurada')}catch(e){toast('Error: '+e.message)}})}
 
-  function openSectionEditor(i){editingIndex=i;draftSection=clone(state.sections[i]);drawerTab='content';$('#drawerTitle').textContent=draftSection.label||typeMeta[draftSection.type]?.[1]||'Editar sección';$('#drawerKicker').textContent=(typeMeta[draftSection.type]?.[1]||draftSection.type).toUpperCase();renderDrawer();$('#editorDrawer').classList.add('open');$('#drawerBackdrop').classList.add('open');$('#editorDrawer').setAttribute('aria-hidden','false');pushLivePreview(draftSection.settings?.anchor||draftSection.id)}
-  function closeDrawer(){editingIndex=null;draftSection=null;$('#editorDrawer').classList.remove('open');$('#drawerBackdrop').classList.remove('open');$('#editorDrawer').setAttribute('aria-hidden','true');scheduleLivePreview()}
+  function openSectionEditor(i){
+    editingIndex=i;
+    draftSection=clone(state.sections[i]);
+    drawerTab='content';
+    $('#drawerTitle').textContent=draftSection.label||typeMeta[draftSection.type]?.[1]||'Editar sección';
+    $('#drawerKicker').textContent=(typeMeta[draftSection.type]?.[1]||draftSection.type).toUpperCase();
+    renderDrawer();
+    $('#adminWorkspace')?.classList.add('editor-open');
+    $('#editorDrawer').classList.add('open');
+    $('#drawerBackdrop').classList.add('open');
+    $('#editorDrawer').setAttribute('aria-hidden','false');
+    requestAnimationFrame(()=>{ resizeLivePreview(); $('#drawerBody')?.scrollTo(0,0); });
+    pushLivePreview(draftSection.settings?.anchor||draftSection.id);
+  }
+  function closeDrawer(){
+    const drawer=$('#editorDrawer');
+    $('#adminWorkspace')?.classList.remove('editor-open');
+    drawer?.classList.remove('open');
+    $('#drawerBackdrop')?.classList.remove('open');
+    drawer?.setAttribute('aria-hidden','true');
+    editingIndex=null;
+    draftSection=null;
+    requestAnimationFrame(resizeLivePreview);
+    scheduleLivePreview();
+  }
   function renderDrawer(){
     $$('.drawer-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.drawerTab===drawerTab));
     const body=$('#drawerBody');
@@ -249,7 +273,9 @@
   $('#mobileSidebar').onclick=()=>$('.admin-sidebar').classList.toggle('open');
   $('#saveAll').onclick=()=>saveAll();
   $('#addSection').onclick=openAddModal; $('#modalClose').onclick=closeModal; $('#modalBackdrop').addEventListener('click',e=>{if(e.target===$('#modalBackdrop'))closeModal()});
-  $('#drawerClose').onclick=$('#drawerCancel').onclick=$('#drawerBackdrop').onclick=closeDrawer;
+  $('#drawerClose').addEventListener('click', closeDrawer);
+  $('#drawerCancel').addEventListener('click', closeDrawer);
+  $('#drawerBackdrop').addEventListener('click', closeDrawer);
   $$('.drawer-tabs button').forEach(b=>b.onclick=()=>{drawerTab=b.dataset.drawerTab;renderDrawer()});
   $('#drawerDone').onclick=()=>{if(drawerTab==='advanced'){try{draftSection=JSON.parse($('#advancedJson').value)}catch(e){toast('JSON inválido: '+e.message);return}}state.sections[editingIndex]=clone(draftSection);markDirty();renderSections();renderDashboard();closeDrawer();toast('Cambios aplicados. Publicá para guardarlos.')};
   $('#resetTheme').onclick=()=>{if(confirm('¿Restaurar el diseño visual por defecto?')){state.theme=clone(defaults.theme);markDirty();renderDesign();toast('Diseño restaurado')}};
@@ -264,6 +290,7 @@
   if ('ResizeObserver' in window) new ResizeObserver(()=>resizeLivePreview()).observe($('#livePreviewStage')); else addEventListener('resize',resizeLivePreview);
   $('#accountButton').onclick=()=>$('#accountMenu').classList.toggle('hidden'); $('#logout').onclick=()=>db.client.auth.signOut();
   $('#login').onclick=async()=>{try{$('#authStatus').textContent='Ingresando…';const {error}=await db.client.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#password').value});if(error)throw error;$('#authStatus').textContent=''}catch(e){$('#authStatus').textContent=e.message}};
+  addEventListener('keydown',e=>{if(e.key==='Escape' && $('#editorDrawer')?.classList.contains('open')) closeDrawer()});
   addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
 
   boot();
