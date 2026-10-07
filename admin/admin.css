@@ -34,8 +34,28 @@
 
 /* Keep the section editor on the editing side so preview remains visible. */
 @media(min-width:1181px){
-  .editor-drawer{inset:68px auto 0 236px;width:min(720px,calc((100vw - 236px) * .54));transform:translateX(-105%);box-shadow:18px 0 55px rgba(0,0,0,.13)}
-  .editor-drawer.open{transform:none}
+  /* Desktop editor: it must always occupy the left workspace column, never slide underneath the sidebar. */
+  .editor-drawer{
+    inset:68px auto 0 236px;
+    width:min(720px,calc((100vw - 236px) * .54));
+    max-width:calc(100vw - 236px - 430px);
+    transform:none;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    overflow:hidden;
+    box-shadow:18px 0 55px rgba(0,0,0,.13);
+    transition:opacity .14s ease,visibility 0s linear .14s
+  }
+  .editor-drawer.open{
+    transform:none;
+    opacity:1;
+    visibility:visible;
+    pointer-events:auto;
+    transition:opacity .14s ease
+  }
+  .editor-drawer .drawer-body,.editor-drawer .drawer-group,.editor-drawer .lang-box{min-width:0}
+  .editor-drawer input,.editor-drawer textarea,.editor-drawer select{max-width:100%}
   .drawer-backdrop{inset:68px calc((100vw - 236px) * .45) 0 236px}
 }
 
